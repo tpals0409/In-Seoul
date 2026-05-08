@@ -149,6 +149,33 @@ describe('buildPrompt — 8,000자 cap', () => {
     expect(out).not.toContain('OLDEST'.repeat(2_000))
     expect(out).not.toContain('MIDDLE'.repeat(2_000))
   })
+
+  it('(f) 비정상적으로 긴 question 도 최종 출력 ≤ MAX_PROMPT_CHARS', () => {
+    // question 자체가 cap 의 2배 — 어떤 budget 산정 누락에도 hard cap 보장.
+    const longQuestion = 'Q'.repeat(MAX_PROMPT_CHARS * 2)
+    const out = buildPrompt({
+      question: longQuestion,
+      ctx: makeCtx(),
+      chunks: [makeChunk('c', 'small chunk content')],
+    })
+    expect(out.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS)
+  })
+
+  it('(g) 단일 chunk 이 budget 보다 커도 통째로 drop 되지 않고 부분 보존', () => {
+    // 첫(그리고 유일한) chunk 가 optional 예산보다 큰 경우. 헤더 + 본문 일부가
+    // 살아남아야 한다 — accept 기준 (b) "chunks 우선 보존".
+    const oversized = 'Z'.repeat(20_000)
+    const out = buildPrompt({
+      question: '짧은 질문',
+      ctx: makeCtx(),
+      chunks: [makeChunk('keep-id', oversized)],
+    })
+    expect(out.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS)
+    // 헤더(인용 ID)가 살아있어 어떤 chunk 의 일부인지 알 수 있어야 함.
+    expect(out).toContain('[출처: keep-id]')
+    // 본문도 일부는 살아남아야 함 (단순 drop 이 아님).
+    expect(out).toContain('Z'.repeat(100))
+  })
 })
 
 describe('fallback templates — 동일 sanitize 정책', () => {
