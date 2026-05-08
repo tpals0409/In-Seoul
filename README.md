@@ -57,6 +57,37 @@ scenario-edit} + AI 어드바이저 시트.
    백엔드 활성화 시
 4. **로컬 Ollama 데몬** (`localhost:11434`, 사용자가 직접 실행) — `ollama` 백엔드 활성화 시
 
+```text
+┌─────────────────────────────────── 브라우저 ────────────────────────────────┐
+│                                                                             │
+│   React 19 UI ──→ lib/sim (PMT/시나리오) ──→ Zustand + LocalStorage         │
+│        │                                                                    │
+│        └──→ AI 시트 ──→ transformers.js (RAG 임베딩 + cosine)               │
+│                  │                                                          │
+└──────────────────┼──────────────────────────────────────────────────────────┘
+                   │
+       ┌───────────┴────────────────┐
+       ▼                            ▼
+┌──────────────┐         ┌──────────────────────┐
+│ 정적 자산    │         │ 사용자 디바이스(선택) │
+│ (빌드 산출)  │         │ Ollama Daemon        │
+│ ──────────── │         │ gemma3:4b :11434     │
+│ knowledge/   │         └──────────────────────┘
+│  index.json  │
+│ data/seoul-  │
+│  prices.json │
+└──────▲───────┘
+       │ 빌드 시점만
+       │ (Node 전용)
+┌──────┴─────────────────────────────────────────┐
+│  npm run refresh:market  ──HTTPS──▶ data.go.kr │
+│  npm run build:knowledge ──→ knowledge index   │
+└────────────────────────────────────────────────┘
+```
+
+<details>
+<summary>mermaid 원본 (지원 환경에서 자동 렌더링)</summary>
+
 ```mermaid
 flowchart TB
     subgraph Browser["브라우저"]
@@ -93,6 +124,7 @@ flowchart TB
     Refresh --> Snap
     BuildIdx --> Idx
 ```
+</details>
 
 ### 레이어
 - `src/lib/sim/` — 순수 함수 (PMT, 자산 성장, 시나리오 보정). React 의존 X.
@@ -115,6 +147,65 @@ flowchart TB
 진짜 DB 는 없다. 사용자 데이터는 **LocalStorage 단일 키** (`inseoul-local-state`) 에
 versioned JSON envelope 로 직렬화된다. 시장 데이터는 별도 *읽기 전용 스냅샷* 으로
 서빙된다.
+
+### ER 구조 (관계 / 엔티티)
+
+**관계 요약** (텍스트):
+- `PersistedState` 1 ─── 1 `SimulationData` (`data` 필드)
+- `PersistedState` 1 ─── 0..1 `ScenarioTweaks` (옵션)
+- `SimulationData` 1 ─── 1 `Assets`
+- `MarketSnapshot` 1 ─── N `DistrictPrice` (`snapshots[]`)
+
+**엔티티 — `PersistedState`** (LocalStorage 단일 키 `inseoul-local-state`)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `v` | int | schema version (현재 1) |
+| `data` | `SimulationData` | wizard 입력값 컨테이너 |
+| `scenario` | `ScenarioKey` | `safe` / `base` / `bold` |
+| `persona` | `PersonaKey` | `early` / `mid` / `senior` |
+| `scenarioTweaks` | `ScenarioTweaks?` | scenario-edit 슬라이더 오버라이드 (옵션) |
+
+**엔티티 — `SimulationData`**
+
+| 필드 | 타입 | 단위 / 비고 |
+|---|---|---|
+| `assets` | `Assets` | `{cash, invest, etc}` |
+| `monthlyIncome` | int | 만원 |
+| `monthlyExpense` | int | 만원 |
+| `monthlySaving` | int | 만원 |
+| `goalDistrict` | string | 서울 25개 자치구 |
+| `goalArea` | int | 평 |
+| `goalPriceM` | int | 만원 |
+| `ltv` | float | % (0..100) |
+| `dsr` | float | % (0..100) |
+| `rate` | float | % 연이율 |
+| `growth` | float | % 연 집값 상승 |
+| `returnRate` | float | % 연 자산 수익 |
+
+**엔티티 — `Assets`** (`cash`, `invest`, `etc`, 각각 만원 단위 int)
+
+**엔티티 — `ScenarioTweaks`** (`growth`, `returnRate`, `rate`, `ltv`, `dsr` — 모두 옵셔널 float)
+
+**엔티티 — `MarketSnapshot`** (`public/data/seoul-prices.json`, 빌드 산출물 — 영구 저장 X)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `version` | string | ISO date |
+| `builtAt` | string | ISO datetime |
+| `snapshots[]` | `DistrictPrice[]` | 25개 자치구 중앙값 |
+
+**엔티티 — `DistrictPrice`**
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `district` | string | ex 강남구 |
+| `lawdCd` | string | 5-digit |
+| `price` | int | 매매 중앙값 (만원) |
+| `jeonsePrice` | int | 전세 중앙값 (만원) |
+
+<details>
+<summary>mermaid erDiagram 원본 (지원 환경에서 자동 렌더링)</summary>
 
 ```mermaid
 erDiagram
@@ -168,6 +259,7 @@ erDiagram
         int jeonsePrice "전세 중앙값 (만원)"
     }
 ```
+</details>
 
 - `PersistedState` 는 zod 스키마로 load 시점에 검증. 깨졌으면 silent null 폴백.
 - `MarketSnapshot` 은 빌드 시점에 `npm run refresh:market` 으로 생성되는 *정적
@@ -188,6 +280,39 @@ erDiagram
 | `none` | — | — | 미설정 또는 명시적 `none` |
 
 ### 분기 로직
+
+```text
+AI 시트 열림
+  └─ useLLM.ensureReady()
+       └─ VITE_LLM_BACKEND ?
+            │
+            ├─ "ollama"
+            │    └─ OllamaClient.ping()
+            │         ├─ 200 OK              → status: ready ──┐
+            │         └─ connection refused  → status: error  ─┤
+            │                                                  │
+            ├─ "mediapipe"                                     │
+            │    └─ WebGPU 지원 ?                              │
+            │         ├─ 예                                    │
+            │         │   └─ 모델 .task 다운로드               │
+            │         │        (OPFS / CacheStorage 캐시)      │
+            │         │        ├─ 성공  → status: ready ───────┤
+            │         │        └─ 실패  → status: error ───────┤
+            │         └─ 아니오 → status: unsupported ─────────┤
+            │                                                  │
+            └─ "none" / 미설정 ───────────────────────────────┐│
+                                                              ││
+                                                              ▼▼
+                          ready ?  ──예──→  generate (토큰 스트리밍)
+                                              └─ fetch/WebGPU 실패
+                                                  └─→ 템플릿 폴백
+                          아니오 ──────────────────→ 템플릿 폴백
+                                                    (templateAnswerFor)
+```
+
+<details>
+<summary>mermaid flowchart 원본 (지원 환경에서 자동 렌더링)</summary>
+
 ```mermaid
 flowchart TD
     Start(["AI 시트 열림"]) --> ER["useLLM.ensureReady"]
@@ -211,6 +336,7 @@ flowchart TD
     Uns --> Tpl
     Gen -->|fetch error 또는<br/>WebGPU 실패| Tpl
 ```
+</details>
 
 ### 폴백 안전망
 - 어느 단계든 실패 → `src/ai/fallback/templates.ts::templateAnswerFor()` 의
