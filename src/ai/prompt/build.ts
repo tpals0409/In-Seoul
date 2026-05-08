@@ -1,8 +1,16 @@
-// Final prompt assembler. Pure: no fetch, no IO. Token budget enforced by
-// crude character-count proxy (≈4 chars / token for Korean+English mix; we use
-// 12,000 chars as a soft cap to stay under ~3,000 input tokens).
+// Final prompt assembler. Pure: no fetch, no IO.
+//
+// Char budget (sprint-1 task-4): 8,000 chars hard cap. Mandatory sections
+// (system + sanitized user context + question) are always included. Optional
+// sections compete for the remainder with priority chunks > recentChat:
+//   - chunks  → fed first up to remaining budget (RAG citations are the most
+//     valuable signal for grounded answers)
+//   - recent  → only what fits after chunks; chat tail truncated head-first
+// Rationale: 8,000 chars ≈ 2,000 input tokens at ~4 chars/token (Korean+English)
+// — well under on-device LLM context windows and keeps prompt logging/screenshot
+// surface area bounded.
 
-import type { AdvisorContext } from '@/types/contracts'
+import type { AdvisorContext, ChatMsg } from '@/types/contracts'
 import { SYSTEM_PROMPT_KO } from './system'
 import { summarizeAdvisorContext } from './context'
 
@@ -18,11 +26,14 @@ export interface BuildPromptArgs {
   chunks: PromptChunk[]
 }
 
-/** ~3,000 tokens × 4 chars/token. Conservative for mixed Korean/English. */
-const MAX_PROMPT_CHARS = 12_000
+/** 8,000 chars ≈ 2,000 input tokens (4 chars/token, KR+EN mix). */
+export const MAX_PROMPT_CHARS = 8_000
+
+/** 섹션 헤더/라벨/줄바꿈 오버헤드 추정. 실제는 ~120, 여유 두고 200. */
+const HEADER_OVERHEAD = 200
 
 function renderChunks(chunks: PromptChunk[], remainingChars: number): string {
-  if (chunks.length === 0) return ''
+  if (chunks.length === 0 || remainingChars <= 0) return ''
   const rendered: string[] = []
   let used = 0
   for (const c of chunks) {
@@ -36,27 +47,51 @@ function renderChunks(chunks: PromptChunk[], remainingChars: number): string {
   return rendered.join('\n\n')
 }
 
-function renderRecentChat(ctx: AdvisorContext): string {
-  const recent = ctx.recentChat.slice(-4)
-  if (recent.length === 0) return ''
-  return recent.map((m) => `${m.role}: ${m.content}`).join('\n')
+/**
+ * recentChat 을 budget 안에 들어오는 만큼 *끝에서부터* 채운다. 가장 최근 메시지가
+ * 유지되고 오래된 메시지부터 절단된다 — 직전 문맥이 답변 품질에 가장 중요.
+ */
+function renderRecentChatWithBudget(
+  recentChat: ChatMsg[],
+  budget: number,
+): string {
+  if (budget <= 0 || recentChat.length === 0) return ''
+  const candidates = recentChat.slice(-4)
+  const lines: string[] = []
+  let used = 0
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const m = candidates[i]
+    if (!m) continue
+    const line = `${m.role}: ${m.content}`
+    // +1 for the joining "\n"
+    const cost = line.length + (lines.length > 0 ? 1 : 0)
+    if (used + cost > budget) break
+    lines.unshift(line)
+    used += cost
+  }
+  return lines.join('\n')
 }
 
 export function buildPrompt(args: BuildPromptArgs): string {
   const { question, ctx, chunks } = args
   const userContext = summarizeAdvisorContext(ctx)
-  const recent = renderRecentChat(ctx)
 
-  // Compute a budget for chunks: subtract everything else from MAX_PROMPT_CHARS.
-  const fixedSize =
+  // Mandatory sections always included — system + user ctx + question + headers.
+  const mandatorySize =
     SYSTEM_PROMPT_KO.length +
     userContext.length +
-    recent.length +
     question.length +
-    // overhead for headers/labels (rough)
-    160
-  const chunkBudget = Math.max(0, MAX_PROMPT_CHARS - fixedSize)
-  const chunksBlock = renderChunks(chunks, chunkBudget)
+    HEADER_OVERHEAD
+  const optionalBudget = Math.max(0, MAX_PROMPT_CHARS - mandatorySize)
+
+  // chunks 우선 — RAG 인용이 답변 grounding 에 가장 중요.
+  const chunksBlock = renderChunks(chunks, optionalBudget)
+  // recentChat 후순위 — chunks 가 쓰고 남은 예산 안에서만, +2 는 섹션 사이 "\n\n".
+  const recentBudget = Math.max(
+    0,
+    optionalBudget - chunksBlock.length - (chunksBlock.length > 0 ? 2 : 0),
+  )
+  const recent = renderRecentChatWithBudget(ctx.recentChat, recentBudget)
 
   const sections: string[] = []
   sections.push(`[시스템] ${SYSTEM_PROMPT_KO}`)
