@@ -1,0 +1,57 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# env
+.env
+.env.local
+.env.development.local
+.env.production.local
+
+# tests
+coverage
+playwright-report
+playwright/.cache
+test-results
+
+# generated knowledge index (rebuild via npm run build:knowledge)
+public/knowledge/index.json
+
+# generated market snapshot (rebuild via npm run refresh:market)
+public/data/seoul-prices.json
+
+# typescript build cache
+*.tsbuildinfo
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI assistant metadata (Claude Code, Codex, Cursor, Continue, Aider 등)
+.claude/
+CLAUDE.md
+.claude.json
+AGENTS.md
+.codex/
+.cursor/
+.cursorrules
+.continue/
+.aider*
+.windsurfrules
