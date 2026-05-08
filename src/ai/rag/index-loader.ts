@@ -7,7 +7,7 @@
 //
 // Cache invalidates whenever the network copy reports a newer `builtAt`.
 
-import type { KnowledgeIndex } from './types'
+import type { KnowledgeChunk, KnowledgeFile, KnowledgeIndex } from './types'
 
 const INDEX_URL = '/knowledge/index.json'
 const DB_NAME = 'inseoul-rag-cache'
@@ -109,9 +109,80 @@ function isKnowledgeIndex(value: unknown): value is KnowledgeIndex {
   if (v['version'] !== 1) return false
   if (typeof v['embeddingModel'] !== 'string') return false
   if (typeof v['embeddingDim'] !== 'number') return false
+  if (!Number.isFinite(v['embeddingDim']) || (v['embeddingDim'] as number) <= 0) return false
   if (typeof v['builtAt'] !== 'string') return false
   if (!Array.isArray(v['chunks'])) return false
   return true
+}
+
+const KNOWLEDGE_FILES: ReadonlySet<KnowledgeFile> = new Set<KnowledgeFile>([
+  'calculation_logic',
+  'financial_concepts',
+  'loan_products',
+  'seoul_districts',
+  'strategies',
+  'risk_disclaimer',
+])
+
+function isKnowledgeFile(value: unknown): value is KnowledgeFile {
+  return typeof value === 'string' && KNOWLEDGE_FILES.has(value as KnowledgeFile)
+}
+
+/**
+ * Deep-validate a single chunk: required fields exist with correct types AND
+ * the base64 `embedding` decodes to a Float32Array whose length matches
+ * `embeddingDim`. Returns null on any violation; the caller logs a single
+ * aggregate warning rather than spamming per-chunk noise.
+ */
+function validateChunk(
+  raw: unknown,
+  embeddingDim: number,
+): KnowledgeChunk | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const c = raw as Record<string, unknown>
+
+  if (typeof c['id'] !== 'string' || c['id'].length === 0) return null
+  if (!isKnowledgeFile(c['file'])) return null
+  if (typeof c['heading'] !== 'string') return null
+  if (typeof c['content'] !== 'string') return null
+  if (typeof c['embedding'] !== 'string' || c['embedding'].length === 0) return null
+
+  let vec: Float32Array
+  try {
+    vec = decodeEmbedding(c['embedding'])
+  } catch {
+    return null
+  }
+  if (vec.length !== embeddingDim) return null
+
+  return raw as KnowledgeChunk
+}
+
+/**
+ * Filter the chunks array down to only the chunks that pass deep validation.
+ * Logs a single aggregate `console.warn` if any chunks were dropped.
+ *
+ * The original index object is NOT mutated; a shallow clone with replaced
+ * `chunks` is returned so the in-memory cache holds the cleaned view.
+ */
+function sanitizeIndex(idx: KnowledgeIndex): KnowledgeIndex {
+  const cleaned: KnowledgeChunk[] = []
+  let dropped = 0
+  for (const raw of idx.chunks) {
+    const ok = validateChunk(raw, idx.embeddingDim)
+    if (ok === null) {
+      dropped += 1
+      continue
+    }
+    cleaned.push(ok)
+  }
+  if (dropped > 0) {
+    console.warn(
+      `[rag/index-loader] Dropped ${String(dropped)} corrupted chunk(s) of ${String(idx.chunks.length)} during validation.`,
+    )
+  }
+  if (dropped === 0) return idx
+  return { ...idx, chunks: cleaned }
 }
 
 function builtAtTime(idx: KnowledgeIndex): number {
@@ -148,6 +219,9 @@ async function doLoad(): Promise<KnowledgeIndex> {
   }
 
   // Try network. If it succeeds and is newer (or no cache), refresh.
+  // We persist the *raw* network payload to IDB (sanitization is applied to
+  // the in-memory copy only) so that a future build with a fixed chunk does
+  // not get masked by a previously-cleaned cache entry.
   let network: KnowledgeIndex | null = null
   try {
     const resp = await fetch(INDEX_URL, { cache: 'no-cache' })
@@ -176,8 +250,9 @@ async function doLoad(): Promise<KnowledgeIndex> {
     )
   }
 
-  memoryIndex = chosen
-  return chosen
+  const sanitized = sanitizeIndex(chosen)
+  memoryIndex = sanitized
+  return sanitized
 }
 
 /** Decode a base64 embedding string back to a Float32Array. */
