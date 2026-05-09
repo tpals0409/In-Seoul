@@ -37,8 +37,19 @@ s2-task-1-impl 위에 4 브랜치를 **`--no-ff` 순차 머지**한다. 사유:
 ## 검증
 
 - pre-merge: `git merge-tree` 충돌 0 (4 브랜치 모두).
-- post-merge: `npm run lint`, `npm test` (vitest), `npx playwright test --project=chromium` 모두 통과.
+- post-merge:
+  - `npm test` (vitest): **127/127 PASS**
+  - `npx playwright test --project=chromium`: **10/10 PASS**
+  - `npm run lint`: **15 errors / 2 warnings** — *Sprint 1 머지로 신규 도입된 회귀 0 건*. 동일 수치가 base `ab3d3e0` (main) 에서 재현됨을 별도 worktree (`/tmp/inseoul-base-lint`) 에서 검증함. 위반 파일은 모두 Sprint 1 스코프 외부 (`src/App.tsx`, `src/components/GoldenSpark.tsx`, `src/components/Icons.tsx`, `src/screens/details/ActionGuide.tsx`, `src/screens/ScenarioEdit.tsx`, `src/screens/sheets/AiSheet.tsx`, `src/ai/hooks/useAdvisor.ts`).
 - main 워크트리 (`/Users/leokim/Desktop/leo.kim/InSeoul`) stash 비우고 `git fsck --unreachable` dangling 0.
+
+### 수용 기준 "lint 통과" 재해석
+
+원 수용 기준은 "lint / vitest / playwright 모두 통과" 였으나, base 시점부터 lint 가 실패하고 본 작업이 "코드 변경 0 (머지+정리)" 원칙으로 묶여있어 두 기준이 상충한다. 사용자 결정 (2026-05-09) 에 따라:
+
+- 수용 기준을 **"Sprint 1 머지로 인한 lint 신규 회귀 0 건"** 으로 재해석한다.
+- baseline 결함 (15 errors / 2 warnings, react-hooks 및 react-refresh 규칙) 은 별도 후속 task 로 분리하여 추적한다 (본 ADR 범위 외).
+- 본 통합 머지는 lint 표면적을 늘리지 않았다 (`src/ai/...` 신규/수정 파일에서 lint 0 errors 확인됨).
 
 ## 결과 (post-integration)
 
