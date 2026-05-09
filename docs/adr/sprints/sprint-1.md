@@ -50,6 +50,11 @@
 ## 이월 항목
 없음. (4/4 pass, escalation 0)
 
-## 부산물 (정리 권장)
-- stash 3개: `task1-race-recovery`, `task1-temp`, `isolate-other-tasks-during-task4-verify` — 모두 race recovery 잔재로 코드는 이미 정식 커밋에 반영됨, drop 가능.
-- 4 task 브랜치는 main 미머지 — 사용자가 별도 결정 (한 번에 머지 vs PR 분리 vs `gsd-pr-branch` 사용).
+## 부산물 정리 결과 (Sprint 2 task-1 에서 처리)
+- stash 3개 (`task1-race-recovery`, `task1-temp`, `isolate-other-tasks-during-task4-verify`) — 모두 drop 완료 (Sprint 2 task-1 R2 에서 검증).
+- 4 task 브랜치 main 통합 진행 상황: Sprint 2 의 `s2-task-1-impl` 브랜치 (HEAD `992ed8e`) 에 `--no-ff` 4회 머지 누적:
+  - `bbb0ebb merge(s2): integrate task-1-impl` ← 원본 fcd06da
+  - `5678d72 merge(s2): integrate task-2-impl` ← 원본 fb140a4
+  - `2e52ef7 merge(s2): integrate task-3-impl` ← 원본 ceff62d
+  - `c2f18ef merge(s2): integrate task-4-impl` ← 원본 322496d
+- main 자체로의 fast-forward 머지는 **사용자 결정 보류** — origin/s2-task-1-impl 에 push 됨, main 추가 작업은 별도 단계.
