@@ -21,7 +21,9 @@
       "impl_ws": "workspace:11",
       "review_ws": "workspace:12",
       "review_file": ".planning/sprint/2/reviews/task-1.md",
-      "status": "dispatched"
+      "status": "pass",
+      "rounds": 2,
+      "head": "992ed8e"
     },
     {
       "n": 2,
@@ -31,10 +33,16 @@
       "depends_on": [1],
       "branch": "s2-task-2-impl",
       "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-2",
-      "impl_ws": null,
-      "review_ws": null,
+      "impl_ws": "workspace:13",
+      "review_ws": "workspace:14",
       "review_file": ".planning/sprint/2/reviews/task-2.md",
-      "status": "queued"
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s2-task-2-impl-prompt.md",
+        "review": "/tmp/inseoul-s2-task-2-review-prompt.md"
+      },
+      "status": "pass",
+      "rounds": 1,
+      "head": "427dd17"
     },
     {
       "n": 3,
@@ -44,24 +52,41 @@
       "depends_on": [1],
       "branch": "s2-task-3-impl",
       "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-3",
-      "impl_ws": null,
-      "review_ws": null,
+      "impl_ws": "workspace:15",
+      "review_ws": "workspace:16",
       "review_file": ".planning/sprint/2/reviews/task-3.md",
-      "status": "queued"
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s2-task-3-impl-prompt.md",
+        "review": "/tmp/inseoul-s2-task-3-review-prompt.md"
+      },
+      "status": "pass",
+      "rounds": 1,
+      "head": "07b7b15"
     },
     {
       "n": 4,
-      "title": "ADR + MEMORY 갱신 (Sprint 1 머지 결과 반영)",
+      "title": "ADR + MEMORY 갱신 (Sprint 1 머지 결과 + Sprint 2 결정 반영)",
       "wave": 3,
-      "scope_files": ["docs/adr/sprints/sprint-1.md"],
+      "scope_files": [
+        "docs/adr/sprints/sprint-1.md",
+        "docs/adr/ADR-S2-001-merge-sprint1.md",
+        "docs/adr/ADR-S2-002-sprint2-decisions.md"
+      ],
       "scope_external": ["~/.claude/projects/-Users-leokim-Desktop-leo-kim-InSeoul/memory/sprint-history.md"],
       "depends_on": [1, 2, 3],
       "branch": "s2-task-4-impl",
       "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-4",
-      "impl_ws": null,
-      "review_ws": null,
+      "impl_ws": "workspace:17",
+      "review_ws": "workspace:18",
       "review_file": ".planning/sprint/2/reviews/task-4.md",
-      "status": "queued"
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s2-task-4-impl-prompt.md",
+        "review": "/tmp/inseoul-s2-task-4-review-prompt.md"
+      },
+      "status": "pass",
+      "rounds": 1,
+      "head": "f030f8f",
+      "note": "f030f8f = sprint-2.md ADR 추가 커밋 포함. review pass 시점 head 는 7d0c981."
     }
   ]
 }
