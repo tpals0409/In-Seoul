@@ -1,29 +1,50 @@
 {
   "sprint": 5,
   "started_at": "2026-05-09T23:00:00+09:00",
+  "ended_at": "2026-05-09T23:25:00+09:00",
   "max_pairs": 4,
+  "summary": {
+    "tasks_total": 4,
+    "tasks_passed": 4,
+    "average_rounds": 1.25,
+    "escalations": 0,
+    "lint_baseline_start": "15e/2w",
+    "lint_baseline_end": "0e/0w",
+    "regression": "vitest 128/128, playwright chromium 10/10, build SUCCESS"
+  },
   "tasks": [
     {
       "n": 1,
       "title": "Sprint 1~3 + Sprint 4 Phase A 코드의 main 통합",
       "scope_files": ["git ops only — no source edits"],
       "depends_on": [],
-      "branch": "s5-task-1-impl",
-      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-1",
-      "impl_ws": "workspace:32",
-      "review_ws": "workspace:33",
-      "status": "dispatched"
+      "branch": "s5-task-1-impl (deleted)",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-1 (removed)",
+      "impl_ws": "workspace:32 (closed)",
+      "review_ws": "workspace:33 (closed)",
+      "status": "completed",
+      "rounds": 1,
+      "fork_point": "72abe2a",
+      "impl_commit": "d4136a8",
+      "merge_commit": "d4136a8 (fast-forward to main)",
+      "main_after": "299b962",
+      "pushed_to_origin_main": true
     },
     {
       "n": 2,
       "title": "Icons.tsx fast-refresh 8e 해결",
-      "scope_files": ["src/components/Icons.tsx"],
+      "scope_files": ["src/components/Icons.tsx", "src/components/IconsImpl.tsx (new)"],
       "depends_on": [1],
-      "branch": "s5-task-2-impl",
-      "worktree": null,
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "queued"
+      "branch": "s5-task-2-impl (deleted)",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2 (removed)",
+      "impl_ws": "workspace:35 (closed)",
+      "review_ws": "workspace:36 (closed)",
+      "status": "completed",
+      "rounds": 1,
+      "fork_point": "299b962",
+      "impl_commit": "d0f40e2",
+      "merge_commit": "367ac7e",
+      "lint_after_merge": "7e/2w"
     },
     {
       "n": 3,
@@ -34,11 +55,16 @@
         "src/screens/details/ActionGuide.tsx"
       ],
       "depends_on": [1],
-      "branch": "s5-task-3-impl",
-      "worktree": null,
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "queued"
+      "branch": "s5-task-3-impl (deleted)",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-3 (removed)",
+      "impl_ws": "workspace:37 (closed)",
+      "review_ws": "workspace:38 (closed)",
+      "status": "completed",
+      "rounds": 1,
+      "fork_point": "299b962",
+      "impl_commit": "44c6ebc",
+      "merge_commit": "05510fe",
+      "lint_after_merge": "3e/1w"
     },
     {
       "n": 4,
@@ -49,11 +75,17 @@
         "src/ai/hooks/useAdvisor.ts"
       ],
       "depends_on": [1],
-      "branch": "s5-task-4-impl",
-      "worktree": null,
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "queued"
+      "branch": "s5-task-4-impl (deleted)",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-4 (removed)",
+      "impl_ws": "workspace:39 (closed)",
+      "review_ws": "workspace:40 (closed)",
+      "status": "completed",
+      "rounds": 2,
+      "fork_point": "299b962",
+      "impl_commit": "b52c9bd",
+      "merge_commit": "60741f4",
+      "lint_after_merge": "0e/0w",
+      "round1_reject_reason": "moving main 비교 base 사용 (Codex review 가 main..task diff 에서 task-2 머지 결과를 task-4 침범으로 오판). 오케스트레이터 정정 후 R2 PASS. ADR-S5-001 채택."
     }
   ]
 }

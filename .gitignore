@@ -67,3 +67,4 @@ android/local.properties
 android/captures/
 android/.cxx/
 android/.idea/
+.planning/sprint/*/.monitor-state/
