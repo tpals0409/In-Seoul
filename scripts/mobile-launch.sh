@@ -168,6 +168,31 @@ launch_ios() {
   run xcrun simctl boot "$sim_name" || true
   run open -a Simulator
 
+  # Bounded wait for simulator boot readiness (Springboard up).
+  # `simctl bootstatus -b` boots if needed and blocks until fully booted.
+  local boot_timeout=120
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf '[dry-run] xcrun simctl bootstatus %q -b   # wait up to %ss\n' \
+      "$sim_name" "$boot_timeout"
+  else
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "$boot_timeout" xcrun simctl bootstatus "$sim_name" -b
+    elif command -v gtimeout >/dev/null 2>&1; then
+      gtimeout "$boot_timeout" xcrun simctl bootstatus "$sim_name" -b
+    else
+      xcrun simctl bootstatus "$sim_name" -b &
+      local bs_pid=$!
+      ( sleep "$boot_timeout" && kill -TERM "$bs_pid" 2>/dev/null || true ) &
+      local watcher=$!
+      if ! wait "$bs_pid" 2>/dev/null; then
+        echo "error: iOS simulator '$sim_name' did not finish booting in ${boot_timeout}s" >&2
+        kill "$watcher" 2>/dev/null || true
+        exit 5
+      fi
+      kill "$watcher" 2>/dev/null || true
+    fi
+  fi
+
   run npm run build
   run npx cap sync ios
   run xcodebuild \
