@@ -8,6 +8,21 @@ import type { GenerateOptions } from './types'
 const MEDIAPIPE_WASM_BASE =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai/wasm'
 
+// VITE_GEMMA_MODEL_URL 의 호스트가 이 목록에 없으면 거부한다.
+// jsdelivr.net / huggingface.co — 정식 모델 배포 채널.
+// localhost / 127.0.0.1 — 개발/오프라인 자체 호스팅.
+// 사용자가 명시적으로 다른 호스트를 허용하려면 VITE_ALLOW_CUSTOM_MODEL_HOST=1 설정.
+export const MODEL_HOST_WHITELIST: readonly string[] = [
+  'jsdelivr.net',
+  'huggingface.co',
+  'localhost',
+  '127.0.0.1',
+]
+
+// 2 GiB. Gemma 2B IT 4-bit 모델은 대략 1.3 GiB 수준이므로 이 한도가 현실적.
+// 초과 시 임의의 거대 바이너리를 LLM 모델로 로드하려는 시도일 가능성이 크다.
+export const MODEL_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
 export type ProgressCallback = (progress: number) => void
 export type TokenCallback = (deltaText: string, done: boolean) => void
 
@@ -35,25 +50,84 @@ async function assertWebGpu(): Promise<void> {
   }
 }
 
+function hostMatches(host: string, suffix: string): boolean {
+  return host === suffix || host.endsWith('.' + suffix)
+}
+
+function envAllowCustomHost(): boolean {
+  // 워커 컨텍스트에서도 Vite 가 import.meta.env 를 주입한다.
+  const raw = import.meta.env['VITE_ALLOW_CUSTOM_MODEL_HOST']
+  return raw === '1' || raw === 'true'
+}
+
+/**
+ * modelUrl 의 호스트가 화이트리스트에 있거나 사용자가 명시적으로 우회 동의했는지
+ * 확인한다. 위반 시 init-failed 메시지로 throw — Worker 가 이 prefix 를 보고
+ * WorkerOutErrorMsg.code='init-failed' 로 매핑한다.
+ */
+export function assertAllowedModelHost(modelUrl: string): void {
+  let host: string
+  try {
+    host = new URL(modelUrl).hostname.toLowerCase()
+  } catch {
+    throw new Error(`init-failed: invalid model URL '${modelUrl}'`)
+  }
+  if (host.length === 0) {
+    throw new Error(`init-failed: invalid model URL '${modelUrl}'`)
+  }
+  for (const allowed of MODEL_HOST_WHITELIST) {
+    if (hostMatches(host, allowed)) return
+  }
+  if (envAllowCustomHost()) return
+  throw new Error(
+    `init-failed: model host '${host}' is not in the allowlist (set VITE_ALLOW_CUSTOM_MODEL_HOST=1 to override)`,
+  )
+}
+
+/**
+ * Content-Length 헤더가 명시적으로 0 또는 비정상(>2GiB)인 경우 거부한다.
+ * 헤더 부재(스트리밍 응답에서 흔함)는 통과시킨다 — 그 경우 본문 길이는 streaming
+ * 누적 바이트로 별도 cap 한다.
+ */
+export function assertContentLength(header: string | null): void {
+  if (header === null) return
+  const n = Number.parseInt(header, 10)
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`init-failed: invalid model size (content-length=${header})`)
+  }
+  if (n > MODEL_MAX_BYTES) {
+    throw new Error(
+      `init-failed: model size ${n} exceeds limit ${MODEL_MAX_BYTES}`,
+    )
+  }
+}
+
 /**
  * Fetch the model with progress reporting. Returns a Uint8Array suitable for
  * `LlmInference.createFromModelBuffer`. We do this manually because MediaPipe's
  * `createFromModelPath` does not expose download progress.
  */
-async function fetchModelWithProgress(
+export async function fetchModelWithProgress(
   modelUrl: string,
   onProgress: ProgressCallback,
 ): Promise<Uint8Array> {
+  assertAllowedModelHost(modelUrl)
   const res = await fetch(modelUrl)
   if (!res.ok) {
     throw new Error(`init-failed: model fetch failed (${res.status})`)
   }
   const totalHeader = res.headers.get('content-length')
+  assertContentLength(totalHeader)
   const total = totalHeader ? Number.parseInt(totalHeader, 10) : 0
   const body = res.body
   if (!body) {
     // Fallback: no streaming, just read whole buffer.
     const buf = await res.arrayBuffer()
+    if (buf.byteLength > MODEL_MAX_BYTES) {
+      throw new Error(
+        `init-failed: model size ${buf.byteLength} exceeds limit ${MODEL_MAX_BYTES}`,
+      )
+    }
     onProgress(1)
     return new Uint8Array(buf)
   }
@@ -66,6 +140,17 @@ async function fetchModelWithProgress(
     if (value) {
       chunks.push(value)
       received += value.byteLength
+      // Defense-in-depth: 헤더가 거짓을 말하더라도 누적 바이트가 cap 을 넘으면 중단.
+      if (received > MODEL_MAX_BYTES) {
+        try {
+          await reader.cancel()
+        } catch {
+          // ignore
+        }
+        throw new Error(
+          `init-failed: model stream exceeded limit ${MODEL_MAX_BYTES} bytes`,
+        )
+      }
       if (total > 0) {
         onProgress(Math.min(0.999, received / total))
       }
@@ -86,6 +171,9 @@ export class MediaPipeLLM {
   private llm: LlmInference | null = null
 
   async init(modelUrl: string, onProgress: ProgressCallback): Promise<void> {
+    // 호스트 화이트리스트는 WebGPU 검사 *전에* 평가 — 비-허용 호스트면 GPU 자원
+    // 없는 환경에서도 동일하게 차단되어야 한다.
+    assertAllowedModelHost(modelUrl)
     await assertWebGpu()
 
     const fileset = await FilesetResolver.forGenAiTasks(MEDIAPIPE_WASM_BASE)
