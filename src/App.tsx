@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { Icons } from '@/components/Icons'
 import { IOSDevice } from '@/components/iosFrame'
@@ -21,19 +21,21 @@ import { AdvisorProvider } from '@/ai/AdvisorContext'
 const FAB_SCREENS = new Set(['result', 'golden', 'action', 'risk', 'calc'])
 
 function useMediaQuery(query: string): boolean {
-  const [match, setMatch] = useState<boolean>(() => {
+  const subscribe = useCallback(
+    (callback: () => void) => {
+      if (typeof window === 'undefined') return () => {}
+      const mq = window.matchMedia(query)
+      mq.addEventListener('change', callback)
+      return () => mq.removeEventListener('change', callback)
+    },
+    [query],
+  )
+  const getSnapshot = useCallback(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia(query).matches
-  })
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const mq = window.matchMedia(query)
-    const handler = (e: MediaQueryListEvent) => setMatch(e.matches)
-    setMatch(mq.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
   }, [query])
-  return match
+  const getServerSnapshot = () => false
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
 function ScreenBody() {
