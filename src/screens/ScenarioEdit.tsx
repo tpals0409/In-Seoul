@@ -1,6 +1,5 @@
 import {
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
 } from 'react'
@@ -89,13 +88,13 @@ export function ScenarioEdit() {
   const setData = useAppStore((s) => s.setData)
   const setScreen = useAppStore((s) => s.setScreen)
 
-  const original = useRef<Draft>({
+  const [original] = useState<Draft>(() => ({
     growth: data.growth,
     returnRate: data.returnRate,
     rate: data.rate,
     ltv: data.ltv,
     dsr: data.dsr,
-  })
+  }))
   const [draft, setDraft] = useState<Draft>({
     growth: data.growth,
     returnRate: data.returnRate,
@@ -115,13 +114,13 @@ export function ScenarioEdit() {
 
   const update = (k: FieldKey, v: number) =>
     setDraft((d) => ({ ...d, [k]: v }))
-  const reset = () => setDraft({ ...original.current })
+  const reset = () => setDraft({ ...original })
   const apply = () => {
     setData({ ...data, ...draft })
     onBack()
   }
 
-  const dirty = FIELD_KEYS.some((k) => draft[k] !== original.current[k])
+  const dirty = FIELD_KEYS.some((k) => draft[k] !== original[k])
 
   return (
     <div className="screen col" style={{ minHeight: '100%' }}>
@@ -215,7 +214,7 @@ export function ScenarioEdit() {
 
         {FIELDS.map((f) => {
           const v = draft[f.key]
-          const orig = original.current[f.key]
+          const orig = original[f.key]
           const pct = ((v - f.min) / (f.max - f.min)) * 100
           const changed = v !== orig
           const rangeStyle: CSSProperties = {
