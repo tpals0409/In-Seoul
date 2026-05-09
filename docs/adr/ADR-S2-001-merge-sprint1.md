@@ -55,3 +55,14 @@ s2-task-1-impl 위에 4 브랜치를 **`--no-ff` 순차 머지**한다. 사유:
 
 - `s2-task-1-impl` HEAD = 4 머지 커밋 + 본 ADR 커밋 (총 5 커밋, base `ab3d3e0` 위).
 - origin push 후 main PR 진행.
+
+## 후속 의사결정 (Sprint 2 진행 중 확정)
+
+### lint baseline 수용
+- 결정: `npm run lint` 전체의 15 errors / 2 warnings 는 Sprint 1 외 pre-existing 코드의 이슈로 간주. 이번 ADR 의 baseline 으로 고정.
+- 다음 스프린트의 lint 게이트는 *스코프 파일 단독 lint* 를 기준으로 한다 (`npx eslint <files>`).
+- 전체 lint clean-up 은 별도 후속 작업으로 미룸 (sprint-history 또는 신규 ADR 에서 추적).
+
+### main 통합 시점
+- 결정: `s2-task-1-impl` 의 origin push 까지 task-1 책임. main 으로의 fast-forward 머지는 사용자 결정으로 위임 (PR 검토 또는 직접 ff).
+- 사유: push 자체가 외부 부수효과 — task-1 의 review pass 후에도 사용자 의지 확인이 안전.
