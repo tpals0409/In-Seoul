@@ -55,3 +55,15 @@ AGENTS.md
 .continue/
 .aider*
 .windsurfrules
+
+# Capacitor native projects (task-2/task-3 generates)
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.cxx/
+android/.idea/
