@@ -59,6 +59,39 @@ function envOllamaModel(): string {
   return typeof m === 'string' && m.length > 0 ? m : 'gemma3:4b'
 }
 
+/** 원격 ollama 호스트로의 *명시적* 옵트인. 정확히 '1' 일 때만 통과. */
+function envAllowRemoteLlm(): boolean {
+  return import.meta.env['VITE_ALLOW_REMOTE_LLM'] === '1'
+}
+
+export interface OllamaHostCheck {
+  /** ensureReady/generate 가 통과해도 되는가. */
+  allowed: boolean
+  /** 호스트가 비-로컬이면 true. allowed=true 인 경우 UI 가 원격 배지 표시. */
+  remote: boolean
+  /** 차단 시 사용자/개발자에게 노출할 사유. allowed=true 면 undefined. */
+  reason?: string
+}
+
+/**
+ * Ollama URL 의 호스트가 호출 가능한지 *boundary* 검증.
+ * - 로컬 호스트 → 항상 통과 (remote=false)
+ * - 비-로컬 + VITE_ALLOW_REMOTE_LLM=1 → 통과하되 remote=true (UI 경고용)
+ * - 비-로컬 + 동의 없음 → 차단. 사용자 재무 데이터가 외부 서버로 전송될 위험.
+ */
+export function checkOllamaHost(url: string, allowRemote: boolean): OllamaHostCheck {
+  if (isLocalLlmHost(url)) return { allowed: true, remote: false }
+  if (allowRemote) return { allowed: true, remote: true }
+  return {
+    allowed: false,
+    remote: true,
+    reason:
+      `Ollama 호스트 ${url} 가 로컬이 아니므로 차단되었습니다. ` +
+      '사용자 데이터가 외부 서버로 전송될 수 있습니다. ' +
+      '명시적으로 원격 호출을 허용하려면 VITE_ALLOW_REMOTE_LLM=1 을 설정하세요.',
+  }
+}
+
 /**
  * 백엔드가 ollama 인 경우, 데몬 호스트가 *진짜로 로컬*인지 판정한다.
  * URL parse 실패하거나 알 수 없는 호스트는 false 처리 (안전 측 기본값).
@@ -101,6 +134,8 @@ function makeRequestId(): string {
 function useOllamaBackend(enabled: boolean): UseLLMResult {
   const [state, setState] = useState<LLMState>({ status: 'idle' })
   const readyPromiseRef = useRef<Promise<void> | null>(null)
+  /** ensureReady 시점에 결정된 원격 여부. status 전이(generating↔ready)에도 보존. */
+  const remoteRef = useRef<boolean>(false)
 
   const client = useMemo(
     () =>
@@ -115,7 +150,17 @@ function useOllamaBackend(enabled: boolean): UseLLMResult {
     if (state.status === 'ready') return
     if (readyPromiseRef.current) return readyPromiseRef.current
 
-    setState({ status: 'loading' })
+    // 호스트 가드를 *fetch 이전* 에 강제. 비-로컬 호스트는 명시 동의 없이 차단.
+    const url = envOllamaUrl()
+    const check = checkOllamaHost(url, envAllowRemoteLlm())
+    if (!check.allowed) {
+      const message = check.reason ?? `Ollama host ${url} is not allowed`
+      setState({ status: 'error', errorMessage: message, remote: true })
+      throw new Error(message)
+    }
+    remoteRef.current = check.remote
+
+    setState({ status: 'loading', remote: check.remote ? true : undefined })
     const p = (async () => {
       try {
         const models = await client.ping()
@@ -127,10 +172,14 @@ function useOllamaBackend(enabled: boolean): UseLLMResult {
           // 모델 매칭은 느슨하게 — 'gemma3:4b' 가 없어도 'gemma3' 변종 있으면 통과.
           // 정확 매칭 실패 시에도 generate 단계에서 재확인되므로 차단하지 않는다.
         }
-        setState({ status: 'ready' })
+        setState({ status: 'ready', remote: check.remote ? true : undefined })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
-        setState({ status: 'error', errorMessage: message })
+        setState({
+          status: 'error',
+          errorMessage: message,
+          remote: check.remote ? true : undefined,
+        })
         throw err
       }
     })()
@@ -149,10 +198,22 @@ function useOllamaBackend(enabled: boolean): UseLLMResult {
       signal?: AbortSignal,
     ): Promise<void> => {
       if (!client) throw new Error('Ollama backend is not enabled')
+
+      // generate 직전 호스트 재검증. ensureReady 우회/env 변동 등 boundary 방어.
+      const url = envOllamaUrl()
+      const check = checkOllamaHost(url, envAllowRemoteLlm())
+      if (!check.allowed) {
+        const message = check.reason ?? `Ollama host ${url} is not allowed`
+        setState({ status: 'error', errorMessage: message, remote: true })
+        throw new Error(message)
+      }
+      remoteRef.current = check.remote
+
       if (state.status !== 'ready') throw new Error('LLM is not ready')
       if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
 
-      setState({ status: 'generating' })
+      const remote = remoteRef.current
+      setState({ status: 'generating', remote: remote ? true : undefined })
       try {
         await client.generate(
           prompt,
@@ -162,16 +223,21 @@ function useOllamaBackend(enabled: boolean): UseLLMResult {
           },
           signal,
         )
-        setState((prev) => (prev.status === 'generating' ? { status: 'ready' } : prev))
+        setState((prev) =>
+          prev.status === 'generating'
+            ? { status: 'ready', remote: remote ? true : undefined }
+            : prev,
+        )
       } catch (err) {
         const isAbort =
           err instanceof Error && (err.name === 'AbortError' || /aborted/i.test(err.message))
         setState((prev) => {
           if (prev.status !== 'generating') return prev
-          if (isAbort) return { status: 'ready' }
+          if (isAbort) return { status: 'ready', remote: remote ? true : undefined }
           return {
             status: 'error',
             errorMessage: err instanceof Error ? err.message : String(err),
+            remote: remote ? true : undefined,
           }
         })
         throw err

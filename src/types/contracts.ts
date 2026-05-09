@@ -147,6 +147,9 @@ export interface LLMState {
   /** 다운로드 진행률 0..1 */
   progress?: number | undefined
   errorMessage?: string | undefined
+  /** Ollama 백엔드가 비-로컬 호스트 + VITE_ALLOW_REMOTE_LLM=1 명시 동의 상태로 동작 중일 때 true.
+   *  사용자 데이터가 외부 서버로 전송되므로, UI 가 "⚠️ 원격 LLM 사용 중" 배지를 표시한다. */
+  remote?: boolean | undefined
 }
 
 /** 목표 자치구의 실거래 중앙값 — 답변 grounding 용. snapshot 미로드 시 undefined. */
