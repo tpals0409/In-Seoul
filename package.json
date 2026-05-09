@@ -19,7 +19,9 @@
     "mobile:trace:ios": "scripts/mobile-trace.sh ios",
     "mobile:trace:android": "scripts/mobile-trace.sh android",
     "mobile:dry:ios": "scripts/mobile-launch.sh ios --dry-run",
-    "mobile:dry:android": "scripts/mobile-launch.sh android --dry-run"
+    "mobile:dry:android": "scripts/mobile-launch.sh android --dry-run",
+    "mobile:mem:ios": "scripts/mobile-mem-measure.sh ios",
+    "mobile:mem:android": "scripts/mobile-mem-measure.sh android"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.3",

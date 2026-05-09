@@ -402,6 +402,26 @@ npx cap run android
 
 > **상태 (Sprint 3 종료 시점)**: 환경 구축 + `cap sync` 통과 + 회귀 0 까지. 시뮬레이터/에뮬레이터 BUILD 검증 + 실기기 테스트 + on-device LLM 모바일 메모리 측정은 **Sprint 4 이월** (호스트 환경 의존성).
 
+### on-device LLM 메모리 측정 (Sprint 4)
+
+`scripts/mobile-mem-measure.sh` 가 부팅된 시뮬레이터/에뮬레이터에서 앱 프로세스의 메모리를 N회 샘플링해 JSON 으로 저장한다. 디바이스를 부팅하지 않으니 **앱이 이미 떠 있어야** 한다 (`npm run mobile:ios` / `npm run mobile:android` 선행).
+
+```bash
+# iOS 시뮬레이터 — vmmap --summary 기반, rss_mb / dirty_mb 기록
+npm run mobile:mem:ios -- --samples 12 --interval 5 --label gemma2b
+
+# Android 에뮬레이터 — adb dumpsys meminfo 기반, pss_mb / native_heap_mb 기록
+npm run mobile:mem:android -- --samples 24 --interval 5 --label gemma2b
+```
+
+출력: `.planning/sprint/4/measurements/{platform}-{label or timestamp}.json`. 스키마는 `scripts/mobile-mem-measure.sh --help` 에 명시. mediapipe (tasks-genai) 가 최근 5분 unified log / logcat 에 보였다면 `mediapipe_loaded: true`.
+
+**측정 운용 노트**
+- **MediaPipe LLM 추론 도중에 측정을 시작**하라. cold load + 첫 추론이 peak 일 가능성이 높아 idle 측정만으로는 ceiling 을 못 잡는다.
+- **iOS 시뮬레이터는 host RAM 공유** 라서 실기기와 차이가 크다. 절대값 회귀 기준으로 쓰지 말고, 동일 호스트 내 변화량 (label A vs B) 비교에만 활용. 실기기 비교 측정 필요.
+- **Android 에뮬레이터도 동일한 caveat**. 게다가 `dumpsys meminfo` 의 EGL/Graphics 라인은 GPU 종류/드라이버에 따라 다르므로 `pss_mb` 위주로만 비교.
+- 결과는 `mobile_summary` 형태로 sprint 산출물에 첨부 — 실기기 1회 + 시뮬/에뮬 baseline 1회 두 JSON 을 같이 두면 운영 판단에 충분.
+
 ## 라이선스 / 데이터 출처
 - 코드: 미정 (저장소 visibility 에 따라 별도 결정)
 - 실거래가: 국토교통부 / 공공데이터포털 15126474, 재배포 정책 준수
