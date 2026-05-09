@@ -69,7 +69,6 @@ export function GoldenSpark({
     if (fromGoal === toGoal && fromAvail === toAvail) return
 
     const dur = 460
-    const start = performance.now()
     const ease = (t: number) => 1 - Math.pow(1 - t, 3)
 
     const interp = (a: string, b: string, t: number): string => {
@@ -93,7 +92,9 @@ export function GoldenSpark({
     }
 
     let raf = 0
+    let start: number | null = null
     const tick = (now: number) => {
+      if (start === null) start = now
       const t = Math.min(1, (now - start) / dur)
       const e = ease(t)
       goalRef.current?.setAttribute('d', interp(fromGoal, toGoal, e))

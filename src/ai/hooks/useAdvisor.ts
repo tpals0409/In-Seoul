@@ -149,7 +149,6 @@ export function useAdvisor(): UseAdvisorResult {
             }
           }
           await generatePromise
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (error !== null) {
             const e: Error = error
             if (e.name !== 'AbortError') errored = true
