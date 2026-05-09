@@ -1,0 +1,132 @@
+
+> app@0.0.0 lint
+> eslint .
+
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/App.tsx
+  32:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/App.tsx:32:5
+  30 |     const mq = window.matchMedia(query)
+  31 |     const handler = (e: MediaQueryListEvent) => setMatch(e.matches)
+> 32 |     setMatch(mq.matches)
+     |     ^^^^^^^^ Avoid calling setState() directly within an effect
+  33 |     mq.addEventListener('change', handler)
+  34 |     return () => mq.removeEventListener('change', handler)
+  35 |   }, [query])  react-hooks/set-state-in-effect
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/ai/hooks/useAdvisor.ts
+  152:11  warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unnecessary-condition')
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/components/GoldenSpark.tsx
+  72:19  error  Error: Cannot call impure function during render
+
+`performance.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/components/GoldenSpark.tsx:72:19
+  70 |
+  71 |     const dur = 460
+> 72 |     const start = performance.now()
+     |                   ^^^^^^^^^^^^^^^^^ Cannot call impure function
+  73 |     const ease = (t: number) => 1 - Math.pow(1 - t, 3)
+  74 |
+  75 |     const interp = (a: string, b: string, t: number): string => {  react-hooks/purity
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/ScenarioEdit.tsx
+  124:33  error  Error: Cannot access refs during render
+
+React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/ScenarioEdit.tsx:124:33
+  122 |   }
+  123 |
+> 124 |   const dirty = FIELD_KEYS.some((k) => draft[k] !== original.current[k])
+      |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Passing a ref to a function may read its value during render
+  125 |
+  126 |   return (
+  127 |     <div className="screen col" style={{ minHeight: '100%' }}>                                                                                                                                                                react-hooks/refs
+  216:21  error  Error: Cannot access refs during render
+
+React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/ScenarioEdit.tsx:216:21
+  214 |         </div>
+  215 |
+> 216 |         {FIELDS.map((f) => {
+      |                     ^^^^^^^^
+> 217 |           const v = draft[f.key]
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 218 |           const orig = original.current[f.key]
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 296 |           )
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 297 |         })}
+      | ^^^^^^^^^^ Cannot access ref value during render
+  298 |
+  299 |         <div
+  300 |           className="t-caption"  react-hooks/refs
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/details/ActionGuide.tsx
+  104:5  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/details/ActionGuide.tsx:104:5
+  102 |
+  103 |   useEffect(() => {
+> 104 |     setVal(cfg.current)
+      |     ^^^^^^ Avoid calling setState() directly within an effect
+  105 |   }, [cfg.current])
+  106 |
+  107 |   const preview = useMemo<{ delta: number; months: number } | null>(() => {  react-hooks/set-state-in-effect
+  105:6  warning  React Hook useEffect has a missing dependency: 'cfg'. Either include it or remove the dependency array. Mutable values like 'cfg.current' aren't valid dependencies because mutating them doesn't re-render the component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/exhaustive-deps
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/sheets/AiSheet.tsx
+  219:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/sheets/AiSheet.tsx:219:5
+  217 |   useEffect(() => {
+  218 |     if (!open) return
+> 219 |     setMsgs([
+      |     ^^^^^^^ Avoid calling setState() directly within an effect
+  220 |       { id: newId(), role: 'context', content: '' },
+  221 |       {
+  222 |         id: newId(),  react-hooks/set-state-in-effect
+  248:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2/src/screens/sheets/AiSheet.tsx:248:5
+  246 |     askInFlightRef.current?.abort()
+  247 |     askInFlightRef.current = null
+> 248 |     setStreaming(false)
+      |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  249 |   }, [open])
+  250 |
+  251 |   if (!open) return null   react-hooks/set-state-in-effect
+
+✖ 9 problems (7 errors, 2 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+
+exit=1
