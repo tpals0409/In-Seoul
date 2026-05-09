@@ -1,0 +1,161 @@
+{
+  "sprint": 4,
+  "title": "실기기 빌드 + on-device LLM 검증 (Sprint 3 이월)",
+  "started_at": "2026-05-09T13:05:00Z",
+  "start_commit": "b27f24d",
+  "max_pairs": 4,
+  "branch_prefix": "s4-",
+  "approach": "Phase A — cmux 자동화 (3 task), Phase B — 사용자 UAT (3 task, 워커 디스패치 안 함)",
+  "scope_boundary": "자동화 가능 부분 (통합 + 시뮬레이터/에뮬레이터 스크립트 + 메모리 측정 스크립트) 만 워커. 실기기 USB 연결 / mediapipe 실제 응답 평가 / 메모리 GUI 캡처는 사용자 UAT.",
+  "lessons_applied": [
+    "git worktree 분리 (feedback_cmux_worktree.md)",
+    "prompt 외부화 /tmp/inseoul-s4-*-prompt.md (feedback_cmux_send_payload_limit.md)",
+    "surface detach 발생 시 오케스트레이터 직접 fallback (feedback_cmux_surface_detached.md)",
+    "Sprint prefix (s4-) 로 task-1-impl 등 브랜치 충돌 회피"
+  ],
+  "tasks": [
+    {
+      "n": 1,
+      "title": "Sprint 3 main 통합 (task-1→2→3→4 순차 머지)",
+      "scope_files": [
+        "package.json",
+        "package-lock.json",
+        "capacitor.config.ts",
+        ".gitignore",
+        "ios/",
+        "android/",
+        "src/components/iosFrame/",
+        "src/App.tsx",
+        "src/index.css"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "branch": "s4-task-1-impl",
+      "worktree": "../InSeoul-s4-task-1",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s4-task-1-impl-prompt.md",
+        "review": "/tmp/inseoul-s4-task-1-review-prompt.md"
+      },
+      "impl_ws": "workspace:25",
+      "review_ws": "workspace:26",
+      "status": "pass",
+      "dispatched_at": "2026-05-09T13:09:00Z",
+      "completed_at": "2026-05-09T13:16:05Z",
+      "rounds": 1,
+      "commit": "c0091af",
+      "merge_commits": ["224f134", "a7d360b", "b493008", "c0091af"],
+      "verification": {
+        "lint": "15 errors / 2 warnings (main baseline 동일, ADR-S2-001 non-blocking)",
+        "vitest": "128/128 pass (14 files, 1.48s)",
+        "playwright_chromium": "10/10 pass (11.0s)",
+        "files_present": ["capacitor.config.ts", "ios/App", "android/app", "src/components/iosFrame"],
+        "isNativePlatform_branch": "src/App.tsx 확인",
+        "merge_strategy": "ort 4-way clean merge, package.json/lock 충돌 0건"
+      },
+      "accept_criteria": [
+        "task-1-impl, task-2-impl, task-3-impl, task-4-impl 4 브랜치가 새 통합 브랜치 s4-task-1-impl 에 모두 머지됨",
+        "package.json/lock 충돌 해결 시 4 브랜치의 의도가 모두 보존됨 (Capacitor core + iOS plugin + Android plugin + native 분기 의존성 누락 없음)",
+        "npm install 통과",
+        "npm run lint 기존 baseline 보존 (Sprint 2 기준)",
+        "npm test (vitest) 전체 pass",
+        "npm run e2e (playwright chromium) 전체 pass",
+        "ios/ 와 android/ 디렉터리 존재, capacitor.config.ts 존재, src/components/iosFrame/ 의 native 분기 코드 존재",
+        "main 직접 push 금지. s4-task-1-impl 브랜치 origin push 까지만"
+      ]
+    },
+    {
+      "n": 2,
+      "title": "시뮬레이터/에뮬레이터 자동화 스크립트 + console log 캡처",
+      "scope_files": [
+        "scripts/mobile-launch.sh",
+        "scripts/mobile-trace.sh",
+        "package.json"
+      ],
+      "depends_on": [1],
+      "wave": 2,
+      "branch": "s4-task-2-impl",
+      "worktree": "../InSeoul-s4-task-2",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s4-task-2-impl-prompt.md",
+        "review": "/tmp/inseoul-s4-task-2-review-prompt.md"
+      },
+      "impl_ws": "(pending)",
+      "review_ws": "(pending)",
+      "status": "blocked-on-1",
+      "rounds": 0,
+      "accept_criteria": [
+        "scripts/mobile-launch.sh: 인자 ios|android 받아 (1) 시뮬레이터/에뮬레이터 부팅 (2) cap sync (3) xcodebuild / gradle build (4) install (5) launch 일괄",
+        "scripts/mobile-trace.sh: 인자 ios|android 받아 console/logcat 스트림을 .planning/sprint/4/runs/{platform}-{timestamp}.log 저장",
+        "package.json npm scripts 등록: mobile:ios, mobile:android, mobile:trace:ios, mobile:trace:android",
+        "스크립트 dry-run 또는 --help 모드에서 실제 시뮬레이터 부팅 없이 명령 echo (CI/리뷰 시 사용)",
+        "Bash 스크립트는 set -euo pipefail, 환경변수 (Android SDK PATH 등) 미존재 시 명확한 에러"
+      ]
+    },
+    {
+      "n": 3,
+      "title": "on-device LLM 메모리 측정 스크립트",
+      "scope_files": [
+        "scripts/mobile-mem-measure.sh",
+        "package.json"
+      ],
+      "depends_on": [2],
+      "wave": 3,
+      "branch": "s4-task-3-impl",
+      "worktree": "../InSeoul-s4-task-3",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s4-task-3-impl-prompt.md",
+        "review": "/tmp/inseoul-s4-task-3-review-prompt.md"
+      },
+      "impl_ws": "(pending)",
+      "review_ws": "(pending)",
+      "status": "blocked-on-2",
+      "rounds": 0,
+      "accept_criteria": [
+        "scripts/mobile-mem-measure.sh: 인자 ios|android 받아 앱 PID 식별 후 (1) 5초 간격 N회 메모리 샘플링 (2) JSON 결과 .planning/sprint/4/measurements/{platform}-{timestamp}.json 저장",
+        "iOS: xcrun simctl spawn booted vmmap 또는 footprint 기반 RSS/dirty 측정",
+        "Android: adb shell dumpsys meminfo {package} 파싱",
+        "결과 JSON 스키마: {platform, app_id, samples: [{ts, rss_mb, dirty_mb}], peak_rss_mb, mediapipe_loaded}",
+        "package.json npm script 등록: mobile:mem:ios, mobile:mem:android",
+        "스크립트는 mediapipe 실제 추론 중에 실행하라는 README 주석"
+      ]
+    },
+    {
+      "n": 4,
+      "title": "[UAT] iPhone 실기기 검증 — 사용자 작업",
+      "uat": true,
+      "depends_on": [3],
+      "checklist": [
+        "USB 연결 + Xcode signing (개인 Apple ID)",
+        "Xcode > Run on iPhone — 빌드 + install 성공",
+        "앱 실행 후 mediapipe 모델 다운로드 (1~2GB) 진행 + 완료 확인",
+        "RAG 응답 1건 이상 정상 생성",
+        "Xcode Instruments > Allocations / Memory Graph 캡처 후 peak RSS 기록"
+      ]
+    },
+    {
+      "n": 5,
+      "title": "[UAT] Android 실기기 검증 — 사용자 작업",
+      "uat": true,
+      "depends_on": [3],
+      "checklist": [
+        "USB 디버깅 활성화 + adb devices 확인",
+        "scripts/mobile-launch.sh android 또는 Android Studio Run",
+        "앱 실행 후 mediapipe 모델 다운로드 + 완료 확인",
+        "RAG 응답 1건 이상 정상 생성",
+        "chrome://inspect 또는 dumpsys meminfo 로 peak RSS 기록"
+      ]
+    },
+    {
+      "n": 6,
+      "title": "[문서] ADR-S4-001 + sprint-4.md + README 갱신",
+      "scope_files": [
+        "docs/adr/ADR-S4-001-mobile-validation-pipeline.md",
+        "docs/adr/sprints/sprint-4.md",
+        "README.md"
+      ],
+      "depends_on": [4, 5],
+      "deferred": true,
+      "note": "UAT 결과를 사용자가 알려준 뒤 오케스트레이터가 main 직접 작성 (Sprint 3 패턴)"
+    }
+  ]
+}
