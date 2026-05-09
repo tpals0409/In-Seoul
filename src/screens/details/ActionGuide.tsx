@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -99,10 +98,14 @@ function ActionCard({
 }: ActionCardProps) {
   const cfg = useMemo(() => buildCfg(a.id, data), [a.id, data])
   const [val, setVal] = useState<number>(cfg.current)
+  const [prevCurrent, setPrevCurrent] = useState<number>(cfg.current)
 
-  useEffect(() => {
+  // 외부 데이터(data) 변경으로 cfg.current 가 바뀌면 슬라이더를 새 기준값으로 동기화.
+  // React 권장 "render 중 이전 값과 비교" 패턴 — effect 가 아닌 렌더 단계 setState.
+  if (cfg.current !== prevCurrent) {
+    setPrevCurrent(cfg.current)
     setVal(cfg.current)
-  }, [cfg.current])
+  }
 
   const preview = useMemo<{ delta: number; months: number } | null>(() => {
     if (val === cfg.current) return null

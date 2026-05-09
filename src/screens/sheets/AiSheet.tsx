@@ -186,6 +186,15 @@ function aiCtxToScreen(ctx: AiContext | null): Screen {
 
 export function AiSheet() {
   const open = useAppStore((s) => s.ui.aiOpen)
+  const prefill = useAppStore((s) => s.ui.aiPrefill)
+  if (!open) return null
+  // prefill 변경 시(이미 열린 상태에서 다른 컨텍스트로 재호출)에도
+  // body 를 새 인스턴스로 mount 하여 msgs/input 을 재초기화한다.
+  // open false→true 전환은 부모의 조건부 렌더만으로도 자연스럽게 mount 된다.
+  return <AiSheetBody key={prefill || '__no_prefill__'} />
+}
+
+function AiSheetBody() {
   const aiCtx = useAppStore((s) => s.ui.aiCtx)
   const prefill = useAppStore((s) => s.ui.aiPrefill)
   const closeAi = useAppStore((s) => s.closeAi)
@@ -198,41 +207,36 @@ export function AiSheet() {
   const llmProgress = advisor.state.llm.progress
   const { snapshot: marketSnapshot } = useMarketSnapshot()
 
-  const [msgs, setMsgs] = useState<SheetMsg[]>([])
-  const [input, setInput] = useState('')
+  // body 는 시트가 열릴 때(또는 prefill 변경 시) 새로 mount 되므로
+  // 초기 msgs/input 을 lazy initializer 로 한 번만 만든다.
+  const [msgs, setMsgs] = useState<SheetMsg[]>(() => [
+    { id: newId(), role: 'context', content: '' },
+    {
+      id: newId(),
+      role: 'ai',
+      content: greeting(data, scenario),
+    },
+  ])
+  const [input, setInput] = useState<string>(() => prefill || '')
   const [streaming, setStreaming] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const askInFlightRef = useRef<AbortController | null>(null)
 
-  // 시트가 열릴 때 모델 ready 시도. 미설정·미지원 환경에선 즉시 거부되어
+  // 시트가 열릴 때(=mount) 모델 ready 시도. 미설정·미지원 환경에선 즉시 거부되어
   // 폴백 모드(템플릿)로 흐른다.
   useEffect(() => {
-    if (!open) return
     advisor.ensureReady().catch(() => {
       /* unsupported / no model URL — handled via state.llm.status */
     })
-  }, [open, advisor])
+  }, [advisor])
 
+  // prefill 이 있으면 시트 진입 직후 입력창에 포커스.
   useEffect(() => {
-    if (!open) return
-    setMsgs([
-      { id: newId(), role: 'context', content: '' },
-      {
-        id: newId(),
-        role: 'ai',
-        content: greeting(data, scenario),
-      },
-    ])
-    if (prefill) {
-      setInput(prefill)
-      window.setTimeout(() => inputRef.current?.focus(), 320)
-    } else {
-      setInput('')
-    }
-    // intentionally only re-init when sheet open/ctx changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, prefill])
+    if (!prefill) return
+    const t = window.setTimeout(() => inputRef.current?.focus(), 320)
+    return () => window.clearTimeout(t)
+  }, [prefill])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -240,15 +244,14 @@ export function AiSheet() {
     }
   }, [msgs, streaming])
 
-  // 시트 닫히면 in-flight 토큰 스트림 폐기.
+  // 시트가 닫히면(body unmount) in-flight 토큰 스트림 폐기.
+  // streaming 상태는 컴포넌트와 함께 사라지므로 별도 세팅 불필요.
   useEffect(() => {
-    if (open) return
-    askInFlightRef.current?.abort()
-    askInFlightRef.current = null
-    setStreaming(false)
-  }, [open])
-
-  if (!open) return null
+    return () => {
+      askInFlightRef.current?.abort()
+      askInFlightRef.current = null
+    }
+  }, [])
 
   const ask = async (q: string) => {
     if (!q || streaming) return
