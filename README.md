@@ -400,7 +400,32 @@ npx cap run android
 ### 네이티브 분기
 `src/App.tsx` 가 `Capacitor.isNativePlatform()` 으로 분기 — 네이티브 환경에서는 `iosFrame` 데스크톱 흉내가 자동 무력화되고 풀스크린 + safe-area-inset 모드로 전환된다. Web (chromium) 동작은 이전과 동일.
 
-> **상태 (Sprint 3 종료 시점)**: 환경 구축 + `cap sync` 통과 + 회귀 0 까지. 시뮬레이터/에뮬레이터 BUILD 검증 + 실기기 테스트 + on-device LLM 모바일 메모리 측정은 **Sprint 4 이월** (호스트 환경 의존성).
+### 자동화 스크립트 (Sprint 4)
+시뮬레이터/에뮬레이터에서 빌드부터 실행까지 한 번에. 호스트 환경 (Xcode 26+, JDK 17+, Android SDK + platform-tools) 이 이미 준비된 상태 가정.
+
+```bash
+# 빌드 + sync + install + launch (시뮬레이터/에뮬레이터)
+npm run mobile:ios            # 첫 부팅된 iOS 시뮬레이터에 install + 실행
+npm run mobile:android        # 첫 가용 AVD 부팅 + install + 실행
+npm run mobile:dry:ios        # 실제 부팅 없이 명령 echo (CI/리뷰)
+
+# console / logcat 캡처 → .planning/sprint/4/runs/{platform}-{ts}.log
+npm run mobile:trace:ios
+npm run mobile:trace:android
+
+# on-device LLM 메모리 샘플링 → .planning/sprint/4/measurements/{platform}-{ts}.json
+npm run mobile:mem:ios
+npm run mobile:mem:android
+```
+
+자세한 옵션: `scripts/mobile-launch.sh --help`, `scripts/mobile-trace.sh --help`, `scripts/mobile-mem-measure.sh --help`.
+
+> **메모리 측정 권장 시점**: mediapipe 추론 *도중* 측정 (cold load + first inference 가 peak). 시뮬레이터/에뮬레이터 측정값은 host RAM 공유로 실기기와 다를 수 있음 — 실기기 비교 필수.
+
+### 상태
+- **Sprint 3** (종료): 환경 구축 + `cap sync` 통과 + 시뮬레이터/에뮬레이터 BUILD 확인 (caveat 해소).
+- **Sprint 4** (종료): main 통합 + 자동화 스크립트 (launch / trace / mem) + ADR-S4-001 (검증 파이프라인).
+- **이월 (Phase B UAT)**: 실기기 (iPhone/Android) 빌드 + mediapipe 모델 다운로드 + RAG 응답 + 메모리 측정. 사용자 손이 필요한 영역. 가이드: [`.planning/sprint/4/UAT-CHECKLIST.md`](.planning/sprint/4/UAT-CHECKLIST.md).
 
 ## 라이선스 / 데이터 출처
 - 코드: 미정 (저장소 visibility 에 따라 별도 결정)

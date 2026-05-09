@@ -146,6 +146,8 @@
       "title": "[UAT] iPhone 실기기 검증 — 사용자 작업",
       "uat": true,
       "depends_on": [3],
+      "status": "deferred-to-uat-followup",
+      "deferred_reason": "사용자 손 / 실기기 / Apple ID / mediapipe 모델 다운로드 시간 의존. Sprint 3 caveat 패턴 동일 — 별도 follow-up 으로 처리.",
       "checklist": [
         "USB 연결 + Xcode signing (개인 Apple ID)",
         "Xcode > Run on iPhone — 빌드 + install 성공",
@@ -159,6 +161,8 @@
       "title": "[UAT] Android 실기기 검증 — 사용자 작업",
       "uat": true,
       "depends_on": [3],
+      "status": "deferred-to-uat-followup",
+      "deferred_reason": "사용자 손 / 실기기 / USB 디버깅 / mediapipe 모델 다운로드 시간 의존.",
       "checklist": [
         "USB 디버깅 활성화 + adb devices 확인",
         "scripts/mobile-launch.sh android 또는 Android Studio Run",
@@ -175,9 +179,20 @@
         "docs/adr/sprints/sprint-4.md",
         "README.md"
       ],
-      "depends_on": [4, 5],
-      "deferred": true,
-      "note": "UAT 결과를 사용자가 알려준 뒤 오케스트레이터가 main 직접 작성 (Sprint 3 패턴)"
+      "depends_on": [3],
+      "status": "completed",
+      "completed_at": "2026-05-09T13:42:00Z",
+      "note": "오케스트레이터 직접 작성 (Sprint 3 패턴). Phase A 결과로 finalize. Phase B UAT 결과는 follow-up commit 으로 추가."
     }
-  ]
+  ],
+  "phase_a_summary": {
+    "completed_at": "2026-05-09T13:42:00Z",
+    "tasks_pass": 3,
+    "tasks_total_phase_a": 3,
+    "average_rounds": 1.33,
+    "escalations": 0,
+    "regression": "vitest 128/128, playwright chromium 10/10, lint 15e/2w (ADR-S2-001 baseline)",
+    "privacy_channels_added": 0
+  },
+  "phase_b_status": "deferred-to-uat-followup"
 }
