@@ -1,13 +1,17 @@
 // Template-based answers — used when WebGPU is unavailable, the model has not
-// downloaded, or generation fails. Ported verbatim from
-// InSeoul_UI/screens/ai-sheet.jsx::answerFor.
+// downloaded, or generation fails. Ported from
+// InSeoul_UI/screens/ai-sheet.jsx::answerFor and re-aligned with the sprint-1
+// task-4 sanitize policy: 사용자 재무 절대값(자산/소득/저축/목표가/대출 한도)
+// 은 1억 단위 또는 50만 단위 라벨로만 노출한다. 폴백은 prompt builder 와 같은
+// quantize 헬퍼를 공유해 LLM/폴백 양쪽이 동일 정책을 따르게 한다.
 //
 // No fetch, no IO. Pure deterministic string composition.
 
 import type { AdvisorContext } from '@/types/contracts'
 import { SCENARIOS } from '@/data/scenarios'
 import { actionEffects, riskEffects } from '@/lib/sim/effects'
-import { fmtKRWLong, fmtYearMonth } from '@/lib/sim/format'
+import { fmtYearMonth } from '@/lib/sim/format'
+import { quantizeAmountM, quantizeMonthlyAmountM } from '@/ai/prompt/context'
 
 function dsrSeverity(dsrBase: number): string {
   if (dsrBase < 35) return '아직 안정 범위'
@@ -29,8 +33,8 @@ export function templateAnswerFor(
     const maxLoan = (data.goalPriceM * data.ltv) / 100
     return (
       `LTV는 집값 대비 대출 비율이에요.\n\n` +
-      `현재 목표 주택은 ${fmtKRWLong(data.goalPriceM)}이고 LTV ${data.ltv}%를 적용했어요. ` +
-      `단순 계산상 최대 ${fmtKRWLong(maxLoan)}까지 대출로 잡아 계산해요.\n\n` +
+      `현재 목표 주택은 ${quantizeAmountM(data.goalPriceM)}이고 LTV ${data.ltv}%를 적용했어요. ` +
+      `단순 계산상 최대 ${quantizeAmountM(maxLoan)}까지 대출로 잡아 계산해요.\n\n` +
       `실제 한도는 DSR과 금융기관 심사에 따라 달라질 수 있어요.`
     )
   }
@@ -40,7 +44,7 @@ export function templateAnswerFor(
       `${scenarioLabel} 시나리오에서는\n` +
       `• 집값이 연 ${sim.sp.growth.toFixed(1)}% 오르고\n` +
       `• 자산은 연 ${sim.sp.returnRate.toFixed(1)}%로 자라며\n` +
-      `• 월 ${data.monthlySaving}만 원을 추가로 모아요\n\n` +
+      `• ${quantizeMonthlyAmountM(data.monthlySaving)}을 추가로 모아요\n\n` +
       `이 속도라면 약 ${fmtYearMonth(sim.months)} 뒤에 가용 자산이 미래 집값을 따라잡아요.`
     )
   }
@@ -57,9 +61,9 @@ export function templateAnswerFor(
   }
 
   if (question.includes('금리') || question.includes('부담')) {
-    const delta = Math.round(risk.monthlyPayDelta).toLocaleString()
+    const deltaLabel = quantizeMonthlyAmountM(risk.monthlyPayDelta)
     return (
-      `금리가 1%p 오르면 월 상환액이 약 ${delta}만 원 더 늘어요.\n` +
+      `금리가 1%p 오르면 월 상환액이 약 ${deltaLabel} 더 늘어요.\n` +
       `DSR도 ${risk.dsrBase.toFixed(0)}%에서 ${risk.dsrHi.toFixed(0)}%로 올라가요.\n\n` +
       `현재 소득 수준에서는 ${dsrSeverity(risk.dsrBase)}이에요.`
     )
@@ -75,10 +79,10 @@ export function templateAnswerFor(
   }
 
   if (question.includes('리스크') || question.includes('위험')) {
-    const delta = Math.round(risk.monthlyPayDelta).toLocaleString()
+    const deltaLabel = quantizeMonthlyAmountM(risk.monthlyPayDelta)
     return (
       `이 조건에서 가장 큰 리스크는 금리 변동이에요.\n\n` +
-      `금리가 1%p 오를 때 월 상환액이 약 ${delta}만 원 늘어요. ` +
+      `금리가 1%p 오를 때 월 상환액이 약 ${deltaLabel} 늘어요. ` +
       `DSR도 ${risk.dsrBase.toFixed(0)}% → ${risk.dsrHi.toFixed(0)}%로 올라요.\n\n` +
       `구매 후 6~12개월 생활비를 비상금으로 두는 걸 추천해요.`
     )
