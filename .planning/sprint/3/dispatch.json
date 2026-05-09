@@ -1,0 +1,91 @@
+{
+  "sprint": 3,
+  "title": "Cross-platform 전환 (Capacitor 환경 구축)",
+  "started_at": "2026-05-09T02:28:26Z",
+  "start_commit": "d149a74",
+  "max_pairs": 4,
+  "approach": "Capacitor (ADR-S3-001) — React 19 + Vite 코드 재사용 ~100%, WebView 기반 iOS/Android 패키징",
+  "scope_boundary": "환경 구축 + 시뮬레이터/에뮬레이터 첫 빌드 검증까지. 실기기 테스트 / 스토어 메타데이터 / 권한 세부는 Sprint 4 이월.",
+  "tasks": [
+    {
+      "n": 1,
+      "title": "Capacitor 코어 + ios/android deps 설치 + capacitor.config.ts",
+      "scope_files": ["package.json", "package-lock.json", "capacitor.config.ts", ".gitignore"],
+      "depends_on": [],
+      "wave": 1,
+      "branch": "task-1-impl",
+      "worktree": "../InSeoul-task-1",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s3-task-1-impl-prompt.md",
+        "review": "/tmp/inseoul-s3-task-1-review-prompt.md"
+      },
+      "impl_ws": "workspace:19",
+      "review_ws": "workspace:20",
+      "status": "dispatched"
+    },
+    {
+      "n": 2,
+      "title": "iOS 플랫폼 추가 + 시뮬레이터 첫 빌드",
+      "scope_files": ["ios/", "package.json", "package-lock.json"],
+      "depends_on": [1],
+      "wave": 2,
+      "branch": "task-2-impl",
+      "worktree": "../InSeoul-task-2",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s3-task-2-impl-prompt.md",
+        "review": "/tmp/inseoul-s3-task-2-review-prompt.md"
+      },
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "pending"
+    },
+    {
+      "n": 3,
+      "title": "Android 플랫폼 추가 + 에뮬레이터 첫 빌드",
+      "scope_files": ["android/", "package.json", "package-lock.json"],
+      "depends_on": [1],
+      "wave": 2,
+      "branch": "task-3-impl",
+      "worktree": "../InSeoul-task-3",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s3-task-3-impl-prompt.md",
+        "review": "/tmp/inseoul-s3-task-3-review-prompt.md"
+      },
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "pending"
+    },
+    {
+      "n": 4,
+      "title": "iosFrame 네이티브 분기 + safe-area",
+      "scope_files": ["src/components/iosFrame/", "src/App.tsx", "src/index.css"],
+      "depends_on": [2, 3],
+      "wave": 3,
+      "branch": "task-4-impl",
+      "worktree": "../InSeoul-task-4",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s3-task-4-impl-prompt.md",
+        "review": "/tmp/inseoul-s3-task-4-review-prompt.md"
+      },
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "pending"
+    },
+    {
+      "n": 5,
+      "title": "on-device LLM 시뮬레이터 점검 + ADR + README",
+      "scope_files": ["docs/adr/", "README.md"],
+      "depends_on": [2, 3],
+      "wave": 3,
+      "branch": "task-5-impl",
+      "worktree": "../InSeoul-task-5",
+      "prompt_files": {
+        "impl": "/tmp/inseoul-s3-task-5-impl-prompt.md",
+        "review": "/tmp/inseoul-s3-task-5-review-prompt.md"
+      },
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "pending"
+    }
+  ]
+}
