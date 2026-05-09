@@ -52,7 +52,7 @@ InSeoul 은 Vite 8 + React 19 + TypeScript 기반 웹앱으로 시작했다. 데
 - 진정 네이티브 API (생체 인증, 푸시, 백그라운드 작업) 사용 시 별도 Capacitor 플러그인 필요
 
 ### 이월 (Sprint 4)
-- **iOS 시뮬레이터 빌드 검증** (`xcodebuild -sdk iphonesimulator build`) — 호스트 Xcode 설치 후 (현 시점 Command Line Tools 만 존재)
+- ~~**iOS 시뮬레이터 빌드 검증**~~ ✅ **2026-05-09 해소** — Xcode 26.4.1 설치 후 `xcodebuild ... build` BUILD SUCCEEDED 확인 (Update Log 참조)
 - **Android 에뮬레이터 빌드 검증** (`./gradlew assembleDebug`) — JDK 17+ 설치 후 (현 시점 `JAVA_HOME` 미설정)
 - **실기기 테스트** — iPhone + Android 디바이스
 - **on-device LLM 모바일 메모리 점검** — `@mediapipe/tasks-genai` 가 iOS WKWebView / Android Chrome WebView 의 메모리 한계 (1~2GB) 내에서 작동하는지
@@ -78,7 +78,7 @@ InSeoul 은 Vite 8 + React 19 + TypeScript 기반 웹앱으로 시작했다. 데
 | 단위 회귀 | vitest 14 files / 128 tests | ✅ 모든 task pass |
 | Lint | ESLint baseline (ADR-S2-001 — 신규 0 건) | ✅ 보존 (15 errors / 2 warnings unchanged) |
 | Web e2e | Playwright chromium | ✅ 회귀 가능성 0 (코드 분기는 isNative=false 시 기존 동작 유지) |
-| iOS 시뮬레이터 빌드 | `xcodebuild build` | ⏭️ Sprint 4 이월 |
+| iOS 시뮬레이터 빌드 | `xcodebuild build` | ✅ BUILD SUCCEEDED (2026-05-09 follow-up, Xcode 26.4.1) |
 | Android 에뮬레이터 빌드 | `./gradlew assembleDebug` | ⏭️ Sprint 4 이월 |
 | 실기기 검증 | iPhone + Android 디바이스 | ⏭️ Sprint 4 이월 |
 | on-device LLM 메모리 | mediapipe WebView 로드 시간/RAM | ⏭️ Sprint 4 이월 |
@@ -88,3 +88,29 @@ InSeoul 은 Vite 8 + React 19 + TypeScript 기반 웹앱으로 시작했다. 데
 - Capacitor 8.x 는 SPM (Swift Package Manager) 기반 — CocoaPods 의존성 제거됨. iOS 디렉터리 구조: `ios/App/App.xcodeproj` + `ios/App/CapApp-SPM/Package.swift`
 - Android 는 표준 Gradle 프로젝트. `android/app/src/main/java/com/inseoul/app/MainActivity.java` 가 진입점
 - `ios/`, `android/` 디렉터리는 git 추적, build 산출물 (`Pods/`, `.gradle/`, `build/`) 만 .gitignore 처리
+
+## Update Log
+
+### 2026-05-09 (Sprint 3 follow-up): iOS 시뮬레이터 빌드 caveat 해소
+
+사용자가 Xcode 26.4.1 (Build 17E202) 설치 후:
+```
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+```
+
+`task-2-impl` 브랜치 worktree (`../InSeoul-task-2`) 에서:
+```
+npm install && npm run build && npx cap sync ios
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator \
+  -configuration Debug -destination 'generic/platform=iOS Simulator' build
+```
+→ **`** BUILD SUCCEEDED **`** (exit 0)
+
+산출물: `~/Library/Developer/Xcode/DerivedData/App-.../Build/Products/Debug-iphonesimulator/App.app` (CodeSign "Sign to Run Locally", App.debug.dylib + __preview.dylib).
+
+**남은 이월** (Sprint 4):
+- 부팅된 시뮬레이터 install + 실행 (`xcrun simctl boot ...` + `npx cap run ios`)
+- 실기기 (iPhone + Android) 테스트
+- Android 에뮬레이터 빌드 (JDK 17+ 설치 필요)
+- on-device LLM 모바일 메모리 측정
