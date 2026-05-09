@@ -1,0 +1,120 @@
+{
+  "sprint": 1,
+  "title": "AI 시트 안정화 (LLM/RAG 가드 강화)",
+  "goal": "사용자 재무 데이터 외부 유출 가능성을 차단하고 AI 어드바이저 경로(LLM 백엔드 + RAG 인덱스 + 프롬프트 빌드 + 폴백)를 신뢰성 있는 상태로 끌어올린다.",
+  "start_commit": "ab3d3e0",
+  "started_at": "2026-05-08T21:31:00+09:00",
+  "max_pairs": 4,
+  "branches": {
+    "base": "main",
+    "impl_naming": "task-{n}-impl"
+  },
+  "review_dir": ".planning/sprint/1/reviews/",
+  "communication": {
+    "impl_done": "[IMPL_DONE] task-{n} commit={short_sha} ready_for_review",
+    "review_pass": "[REVIEW_PASS] task-{n} round={R}",
+    "review_reject": "[REVIEW_REJECT] task-{n} round={R} see-review-file",
+    "review_escalate": "[REVIEW_ESCALATE] task-{n}",
+    "needs_help": "[NEEDS_HELP] task-{n} <reason>",
+    "broadcast": "cmux display-message -p \"<signal>\""
+  },
+  "review_dimensions": [
+    "correctness — 수용 기준 충족",
+    "regression — Vitest 단위 + Playwright e2e 영향",
+    "privacy — Local-First 원칙: 사용자 재무 데이터 외부 송신 채널 0건",
+    "on-device LLM 가드 — ollama / mediapipe 백엔드 분기 보존",
+    "readability",
+    "test coverage"
+  ],
+  "escalation": {
+    "max_rounds": 3,
+    "on_max": "review 워커가 [REVIEW_ESCALATE] 후 idle. 사람 개입 필요."
+  },
+  "tasks": [
+    {
+      "n": 1,
+      "title": "Ollama 호스트 화이트리스트 가드를 실제 호출 차단으로 승격",
+      "branch": "task-1-impl",
+      "scope_files": [
+        "src/ai/hooks/useLLM.ts",
+        "src/ai/hooks/__tests__/useLLM.test.ts (신규)",
+        "src/types/contracts.ts (LLMState 확장 시)"
+      ],
+      "context": "현재 isLocalLlmHost / isOnDeviceLlm 은 useLLM.ts:70-93 에 정의·export 만 되어 있고, useOllamaBackend 의 ensureReady/generate 어디에서도 *실제 호출 차단*에 사용되지 않는다. 비-로컬 ollama URL (예: VITE_OLLAMA_URL=http://192.168.1.50:11434) 시 사용자 재무 데이터가 외부 서버로 흘러간다.",
+      "accept_criteria": [
+        "(a) 비-로컬 ollama URL 시 ensureReady/generate 가 throw + state.status='error' + 명확한 errorMessage",
+        "(b) VITE_ALLOW_REMOTE_LLM=1 명시 동의 시에만 통과 + LLMState 에 remote: true 플래그 노출 (UI 가 배지 표시 가능)",
+        "(c) localhost / 127.0.0.1 / ::1 케이스 회귀 없음",
+        "(d) Vitest 단위 4건 이상: localhost 통과, 외부 URL 차단, 동의 시 통과+remote 플래그, mediapipe 백엔드는 영향 없음"
+      ],
+      "depends_on": [],
+      "impl_ws": "workspace:3",
+      "review_ws": "workspace:4",
+      "status": "dispatched"
+    },
+    {
+      "n": 2,
+      "title": "RAG 인덱스 깊은 검증 + 손상 청크 폴백",
+      "branch": "task-2-impl",
+      "scope_files": [
+        "src/ai/rag/index-loader.ts",
+        "src/ai/rag/types.ts",
+        "src/ai/rag/__tests__/index-loader.test.ts (신규)"
+      ],
+      "context": "현재 isKnowledgeIndex (index-loader.ts:106-115) 는 top-level 필드만 검사하고 chunks 배열 내부는 검증하지 않는다. 손상된 chunk (id 누락, embedding base64 깨짐, 차원 불일치) 가 retrieve 단계에서 throw 를 일으켜 advisor 흐름 전체가 폴백으로 빠진다.",
+      "accept_criteria": [
+        "(a) chunks 내부 필드(id, file, heading, content, embedding) 타입/존재 검증",
+        "(b) embeddingDim 과 base64 디코딩 시 실제 Float32 차원 일치 검증",
+        "(c) 손상된 단일 chunk 는 스킵하고 인덱스 전체는 사용 (콘솔 경고 1회)",
+        "(d) 전체 인덱스 스키마 위반 시 기존처럼 거부",
+        "(e) Vitest 단위 5건 이상: 정상 / chunk 누락 / 차원 불일치 / base64 깨짐 / 전체 거부"
+      ],
+      "depends_on": [],
+      "impl_ws": "workspace:5",
+      "review_ws": "workspace:6",
+      "status": "dispatched"
+    },
+    {
+      "n": 3,
+      "title": "MediaPipe 모델 URL 출처 + 응답 메타 가드",
+      "branch": "task-3-impl",
+      "scope_files": [
+        "src/ai/llm/mediapipe.ts",
+        "src/ai/llm/__tests__/mediapipe.test.ts (신규 또는 기존 보강)"
+      ],
+      "context": "fetchModelWithProgress (mediapipe.ts:43-83) 가 modelUrl 의 출처/응답 메타를 검증하지 않고 ArrayBuffer 로 적재한다. 사용자가 의도하지 않은 URL 이 VITE_GEMMA_MODEL_URL 에 들어가면 임의 바이너리를 LLM 모델로 로드.",
+      "accept_criteria": [
+        "(a) modelUrl 의 호스트가 사전 정의 화이트리스트(jsdelivr.net, huggingface.co, localhost, 127.0.0.1) 외이고 VITE_ALLOW_CUSTOM_MODEL_HOST 미설정이면 init-failed throw",
+        "(b) HTTP 응답 content-length 가 0 또는 2GB 초과면 init-failed throw",
+        "(c) WebGPU 미지원 케이스 (assertWebGpu 분기) 회귀 없음",
+        "(d) Vitest 단위 3건 이상: 화이트리스트 통과, 미허용 호스트 차단, 비정상 크기 차단"
+      ],
+      "depends_on": [],
+      "impl_ws": "workspace:7",
+      "review_ws": "workspace:8",
+      "status": "dispatched"
+    },
+    {
+      "n": 4,
+      "title": "프롬프트 입력 sanitize + 길이 cap",
+      "branch": "task-4-impl",
+      "scope_files": [
+        "src/ai/prompt/build.ts",
+        "src/ai/prompt/context.ts",
+        "src/ai/fallback/templates.ts",
+        "src/ai/prompt/__tests__/build.test.ts (보강)"
+      ],
+      "context": "buildPrompt 가 사용자 재무 ctx (자산/소득/저축/목표가, 단위 만원) 를 *원시 정수값* 그대로 LLM 프롬프트에 박아넣을 가능성이 있다. on-device LLM 인 한 외부 송신은 없지만, 프롬프트 로깅/스크린샷/지원 시나리오에서 노출 위험. 또한 RAG chunks + ctx + history 가 무한히 커질 수 있음.",
+      "accept_criteria": [
+        "(a) 자산/소득/저축/목표가 등 만원 단위값을 범주(예: 5000만 단위 양자화 또는 '1억대' 라벨)로 변환 후 프롬프트 삽입",
+        "(b) 프롬프트 총 길이 8000 char cap. 초과 시 chunks 우선 보존 → recentChat 후순위 절단",
+        "(c) 폴백 템플릿(fallback/templates.ts) 도 동일 sanitize 정책 적용",
+        "(d) Vitest 단위 4건 이상: 양자화, cap, 우선순위 절단, 폴백 일관성"
+      ],
+      "depends_on": [],
+      "impl_ws": "workspace:9",
+      "review_ws": "workspace:10",
+      "status": "dispatched"
+    }
+  ]
+}

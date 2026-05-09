@@ -1,0 +1,67 @@
+{
+  "sprint": 2,
+  "title": "Sprint 1 머지 + 후속 안정화",
+  "started_at": "2026-05-09T01:18:36Z",
+  "start_commit": "322496d",
+  "main_at_start": "ab3d3e0",
+  "max_pairs": 4,
+  "merge_strategy": "no-ff-sequential",
+  "origin": "https://github.com/tpals0409/In-Seoul.git",
+  "memory_applied": ["feedback_cmux_worktree.md"],
+  "tasks": [
+    {
+      "n": 1,
+      "title": "Sprint 1 4 브랜치 main 통합 + 잔재 정리 + origin push",
+      "wave": 1,
+      "scope_files": [],
+      "scope_refs": ["task-1-impl", "task-2-impl", "task-3-impl", "task-4-impl", "main"],
+      "depends_on": [],
+      "branch": "s2-task-1-impl",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-1",
+      "impl_ws": "workspace:11",
+      "review_ws": "workspace:12",
+      "review_file": ".planning/sprint/2/reviews/task-1.md",
+      "status": "dispatched"
+    },
+    {
+      "n": 2,
+      "title": "통합 회귀 smoke (Vitest 통합 테스트)",
+      "wave": 2,
+      "scope_files": ["src/ai/__tests__/sprint1-integration.test.ts"],
+      "depends_on": [1],
+      "branch": "s2-task-2-impl",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-2",
+      "impl_ws": null,
+      "review_ws": null,
+      "review_file": ".planning/sprint/2/reviews/task-2.md",
+      "status": "queued"
+    },
+    {
+      "n": 3,
+      "title": "GitHub Actions CI 도입",
+      "wave": 2,
+      "scope_files": [".github/workflows/ci.yml"],
+      "depends_on": [1],
+      "branch": "s2-task-3-impl",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-3",
+      "impl_ws": null,
+      "review_ws": null,
+      "review_file": ".planning/sprint/2/reviews/task-3.md",
+      "status": "queued"
+    },
+    {
+      "n": 4,
+      "title": "ADR + MEMORY 갱신 (Sprint 1 머지 결과 반영)",
+      "wave": 3,
+      "scope_files": ["docs/adr/sprints/sprint-1.md"],
+      "scope_external": ["~/.claude/projects/-Users-leokim-Desktop-leo-kim-InSeoul/memory/sprint-history.md"],
+      "depends_on": [1, 2, 3],
+      "branch": "s2-task-4-impl",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul-s2-task-4",
+      "impl_ws": null,
+      "review_ws": null,
+      "review_file": ".planning/sprint/2/reviews/task-4.md",
+      "status": "queued"
+    }
+  ]
+}
