@@ -13,7 +13,13 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "build:knowledge": "tsx scripts/build-knowledge.ts",
-    "refresh:market": "tsx scripts/refresh-market.ts"
+    "refresh:market": "tsx scripts/refresh-market.ts",
+    "mobile:ios": "scripts/mobile-launch.sh ios",
+    "mobile:android": "scripts/mobile-launch.sh android",
+    "mobile:trace:ios": "scripts/mobile-trace.sh ios",
+    "mobile:trace:android": "scripts/mobile-trace.sh android",
+    "mobile:dry:ios": "scripts/mobile-launch.sh ios --dry-run",
+    "mobile:dry:android": "scripts/mobile-launch.sh android --dry-run"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.3",
