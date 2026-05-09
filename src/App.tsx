@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { Icons } from '@/components/Icons'
 import { IOSDevice } from '@/components/iosFrame'
 import { useAppStore } from '@/store/appStore'
@@ -173,8 +174,9 @@ function AppShell() {
 
 export default function App() {
   const isMobile = useMediaQuery('(max-width: 480px)')
+  const isNative = Capacitor.isNativePlatform()
 
-  if (isMobile) {
+  if (isNative || isMobile) {
     return (
       <AdvisorProvider>
         <div
@@ -185,6 +187,10 @@ export default function App() {
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            paddingLeft: 'env(safe-area-inset-left)',
+            paddingRight: 'env(safe-area-inset-right)',
           }}
         >
           <AppShell />
