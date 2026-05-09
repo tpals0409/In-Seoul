@@ -53,7 +53,7 @@ InSeoul 은 Vite 8 + React 19 + TypeScript 기반 웹앱으로 시작했다. 데
 
 ### 이월 (Sprint 4)
 - ~~**iOS 시뮬레이터 빌드 검증**~~ ✅ **2026-05-09 해소** — Xcode 26.4.1 설치 후 `xcodebuild ... build` BUILD SUCCEEDED 확인 (Update Log 참조)
-- **Android 에뮬레이터 빌드 검증** (`./gradlew assembleDebug`) — JDK 17+ 설치 후 (현 시점 `JAVA_HOME` 미설정)
+- ~~**Android 에뮬레이터 빌드 검증**~~ ✅ **2026-05-09 해소** — JDK 21 (Android Studio JBR) + SDK android-36.1 환경에서 `./gradlew assembleDebug` BUILD SUCCESSFUL, `app-debug.apk` 생성 (Update Log 참조)
 - **실기기 테스트** — iPhone + Android 디바이스
 - **on-device LLM 모바일 메모리 점검** — `@mediapipe/tasks-genai` 가 iOS WKWebView / Android Chrome WebView 의 메모리 한계 (1~2GB) 내에서 작동하는지
 - **App Store / Play Store 메타데이터** — 아이콘, 스플래시, 권한 description, 개인정보처리방침 링크
@@ -79,7 +79,7 @@ InSeoul 은 Vite 8 + React 19 + TypeScript 기반 웹앱으로 시작했다. 데
 | Lint | ESLint baseline (ADR-S2-001 — 신규 0 건) | ✅ 보존 (15 errors / 2 warnings unchanged) |
 | Web e2e | Playwright chromium | ✅ 회귀 가능성 0 (코드 분기는 isNative=false 시 기존 동작 유지) |
 | iOS 시뮬레이터 빌드 | `xcodebuild build` | ✅ BUILD SUCCEEDED (2026-05-09 follow-up, Xcode 26.4.1) |
-| Android 에뮬레이터 빌드 | `./gradlew assembleDebug` | ⏭️ Sprint 4 이월 |
+| Android 에뮬레이터 빌드 | `./gradlew assembleDebug` | ✅ BUILD SUCCESSFUL (2026-05-09 follow-up, JDK 21 / android-36.1) |
 | 실기기 검증 | iPhone + Android 디바이스 | ⏭️ Sprint 4 이월 |
 | on-device LLM 메모리 | mediapipe WebView 로드 시간/RAM | ⏭️ Sprint 4 이월 |
 
@@ -109,8 +109,32 @@ xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator \
 
 산출물: `~/Library/Developer/Xcode/DerivedData/App-.../Build/Products/Debug-iphonesimulator/App.app` (CodeSign "Sign to Run Locally", App.debug.dylib + __preview.dylib).
 
+### 2026-05-09 (Sprint 3 follow-up): Android Gradle 빌드 caveat 해소
+
+사용자가 `brew install --cask temurin@17 android-studio` + Android Studio Setup Wizard "Standard" 로 SDK (`~/Library/Android/sdk` — platforms `android-36.1`, build-tools `36.1.0`/`37.0.0`) 다운로드.
+
+**1차 시도 (시스템 JDK 17)**: BUILD FAILED
+```
+> Task :capacitor-android:compileDebugJavaWithJavac FAILED
+error: invalid source release: 21
+```
+Capacitor 8.x Android 라이브러리가 Java 21 source release 요구.
+
+**2차 시도 (Android Studio 내장 JBR 21.0.10)**: BUILD SUCCESSFUL
+```
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+cd /Users/leokim/Desktop/leo.kim/InSeoul-task-3/android
+./gradlew assembleDebug
+```
+→ **`BUILD SUCCESSFUL in 32s`** (93 tasks, 56 executed / 37 up-to-date)
+
+산출물: `android/app/build/outputs/apk/debug/app-debug.apk` (+ `output-metadata.json`).
+
+**운영 인사이트**: Capacitor 8.x Android 빌드는 **JDK 21 필수**. 시스템 JDK 17 (temurin) 만으로 부족. Android Studio 내장 JBR 21 활용이 가장 간편 — `JAVA_HOME` 을 `/Applications/Android Studio.app/Contents/jbr/Contents/Home` 로 export.
+
 **남은 이월** (Sprint 4):
-- 부팅된 시뮬레이터 install + 실행 (`xcrun simctl boot ...` + `npx cap run ios`)
+- 부팅된 시뮬레이터/에뮬레이터 install + 실행 (`xcrun simctl boot ...` + `npx cap run ios` / `adb install` + `npx cap run android`)
 - 실기기 (iPhone + Android) 테스트
-- Android 에뮬레이터 빌드 (JDK 17+ 설치 필요)
-- on-device LLM 모바일 메모리 측정
+- on-device LLM (mediapipe) 모바일 WebView 메모리 측정 + 첫 로드 시간
+- App Store / Play Store 메타데이터 (아이콘, 스플래시, 권한, 개인정보처리방침)
