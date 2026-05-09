@@ -368,10 +368,39 @@ flowchart TD
 ## 스크립트
 - `npm run dev` / `npm run build` / `npm run preview`
 - `npm run lint`
-- `npm test` (Vitest 단위 70개)
+- `npm test` (Vitest 단위 128개)
 - `npm run e2e` (Playwright 10개 — 사전 `npx playwright install chromium` 필요)
 - `npm run build:knowledge` — `src/knowledge/docs/*.md` → `public/knowledge/index.json`
 - `npm run refresh:market` — data.go.kr 호출 → `public/data/seoul-prices.json`
+
+## 모바일 빌드 (Capacitor — Sprint 3)
+
+InSeoul 은 iOS / Android 네이티브 앱으로도 빌드된다. 코드베이스는 단일 (Vite + React 19), Capacitor 가 WebView 로 패키징한다. 자세한 결정 근거: [ADR-S3-001](docs/adr/ADR-S3-001-cross-platform-capacitor.md).
+
+### iOS 시뮬레이터
+사전 요구: **Xcode** 설치 (App Store, Command Line Tools 만으로는 불충분).
+```bash
+npm run build           # dist/ 갱신
+npx cap sync ios        # web → ios/App/App/public 동기화
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug build
+# 또는 부팅된 시뮬레이터에 설치 + 실행:
+npx cap run ios
+```
+
+### Android 에뮬레이터
+사전 요구: **JDK 17+** (`brew install --cask temurin`) + **Android SDK** (`ANDROID_HOME` 설정).
+```bash
+npm run build           # dist/ 갱신
+npx cap sync android    # web → android/app/src/main/assets/public 동기화
+cd android && ./gradlew assembleDebug
+# 또는 부팅된 에뮬레이터에 설치 + 실행:
+npx cap run android
+```
+
+### 네이티브 분기
+`src/App.tsx` 가 `Capacitor.isNativePlatform()` 으로 분기 — 네이티브 환경에서는 `iosFrame` 데스크톱 흉내가 자동 무력화되고 풀스크린 + safe-area-inset 모드로 전환된다. Web (chromium) 동작은 이전과 동일.
+
+> **상태 (Sprint 3 종료 시점)**: 환경 구축 + `cap sync` 통과 + 회귀 0 까지. 시뮬레이터/에뮬레이터 BUILD 검증 + 실기기 테스트 + on-device LLM 모바일 메모리 측정은 **Sprint 4 이월** (호스트 환경 의존성).
 
 ## 라이선스 / 데이터 출처
 - 코드: 미정 (저장소 visibility 에 따라 별도 결정)

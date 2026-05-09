@@ -21,7 +21,9 @@
       },
       "impl_ws": "workspace:19",
       "review_ws": "workspace:20",
-      "status": "dispatched"
+      "status": "pass",
+      "commit": "65e7575",
+      "rounds": 1
     },
     {
       "n": 2,
@@ -35,9 +37,11 @@
         "impl": "/tmp/inseoul-s3-task-2-impl-prompt.md",
         "review": "/tmp/inseoul-s3-task-2-review-prompt.md"
       },
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "pending"
+      "impl_ws": "workspace:21 (closed)",
+      "review_ws": "workspace:22 (closed — surface detached, fallback to orchestrator)",
+      "status": "pass",
+      "rounds": 1,
+      "caveat": "simulator-build-deferred-to-sprint-4 (Xcode 미설치)"
     },
     {
       "n": 3,
@@ -51,9 +55,11 @@
         "impl": "/tmp/inseoul-s3-task-3-impl-prompt.md",
         "review": "/tmp/inseoul-s3-task-3-review-prompt.md"
       },
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "pending"
+      "impl_ws": "workspace:23 (closed)",
+      "review_ws": "workspace:24 (closed — surface detached, fallback to orchestrator)",
+      "status": "pass",
+      "rounds": 1,
+      "caveat": "emulator-build-deferred-to-sprint-4 (JDK 미설치)"
     },
     {
       "n": 4,
@@ -67,25 +73,24 @@
         "impl": "/tmp/inseoul-s3-task-4-impl-prompt.md",
         "review": "/tmp/inseoul-s3-task-4-review-prompt.md"
       },
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "pending"
+      "impl_ws": "orchestrator-direct (cmux surface detach fallback)",
+      "review_ws": "orchestrator-direct",
+      "status": "pass",
+      "rounds": 1,
+      "commit": "5f8ce65"
     },
     {
       "n": 5,
-      "title": "on-device LLM 시뮬레이터 점검 + ADR + README",
-      "scope_files": ["docs/adr/", "README.md"],
+      "title": "ADR-S3-001 + sprint-3 summary + README 모바일 빌드 섹션",
+      "scope_files": ["docs/adr/ADR-S3-001-cross-platform-capacitor.md", "docs/adr/sprints/sprint-3.md", "README.md"],
       "depends_on": [2, 3],
       "wave": 3,
-      "branch": "task-5-impl",
-      "worktree": "../InSeoul-task-5",
-      "prompt_files": {
-        "impl": "/tmp/inseoul-s3-task-5-impl-prompt.md",
-        "review": "/tmp/inseoul-s3-task-5-review-prompt.md"
-      },
-      "impl_ws": null,
-      "review_ws": null,
-      "status": "pending"
+      "branch": "main (direct)",
+      "worktree": "/Users/leokim/Desktop/leo.kim/InSeoul",
+      "prompt_files": null,
+      "impl_ws": "orchestrator-direct",
+      "review_ws": "n/a (documentation)",
+      "status": "completed"
     }
   ]
 }
