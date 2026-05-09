@@ -1,0 +1,13 @@
+
+> app@0.0.0 test
+> vitest run
+
+
+ RUN  v4.1.5 /Users/leokim/Desktop/leo.kim/InSeoul-s5-task-2
+
+
+ Test Files  14 passed (14)
+      Tests  128 passed (128)
+   Start at  23:11:25
+   Duration  1.59s (transform 710ms, setup 664ms, import 1.01s, tests 189ms, environment 8.12s)
+
