@@ -1,6 +1,10 @@
-// MediaPipe Gemma 2B IT 4-bit wrapper. Runs inside the Web Worker — never
-// import from main-thread modules. The only network IO permitted in the entire
-// /ai tree happens here (the model download from the configured URL).
+// MediaPipe Gemma 2B IT 4-bit wrapper. Default execution context is the Web
+// Worker (llm.worker.ts). The only network IO permitted in the entire /ai
+// tree happens here (the model download from the configured URL).
+//
+// Sprint 11 task-4: useLLM 의 main-thread fallback (VITE_LLM_RUN_MAIN_THREAD=1)
+// 도 이 모듈을 직접 import 한다. 활성 시 generate 가 main thread micro-task 를
+// 점유 — UI 스크롤/입력 freeze 위험. 워커 silent-death 잔존 케이스 회피용 옵트인.
 
 import { FilesetResolver, LlmInference } from '@mediapipe/tasks-genai'
 import type { GenerateOptions } from './types'

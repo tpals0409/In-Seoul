@@ -3,10 +3,16 @@
 //   - 'mediapipe' → MediaPipe Web LLM in a Web Worker (existing path)
 //   - 'none'/미설정 → 사용 안 함 (UI 는 템플릿 폴백)
 //
+// Sprint 11 task-4: VITE_LLM_RUN_MAIN_THREAD=1 옵트인 시 'mediapipe' 백엔드가
+// Web Worker 를 우회하고 main thread 에서 직접 추론한다. Sprint 10 핸드오프
+// fix 후보 B — worker 자체가 silent-death 로 죽는 잔존 케이스의 최후 fallback.
+// UI freeze 위험이 있어 디폴트 off.
+//
 // 어떤 백엔드든 hook 의 외부 인터페이스(state/ensureReady/generate)는 동일하다.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LLMState } from '@/types/contracts'
+import type { MediaPipeLLM as MediaPipeLLMType } from '../llm/mediapipe'
 import type { WorkerInMsg, WorkerOutMsg } from '../llm/types'
 import { OllamaClient } from '../llm/ollama'
 
@@ -42,6 +48,11 @@ function envBackend(): BackendKind {
   const gemma = import.meta.env['VITE_GEMMA_MODEL_URL']
   if (typeof gemma === 'string' && gemma.length > 0) return 'mediapipe'
   return 'none'
+}
+
+/** mediapipe 백엔드를 Web Worker 대신 main thread 에서 돌릴지. 정확히 '1' 일 때만 통과. */
+function envRunMainThread(): boolean {
+  return import.meta.env['VITE_LLM_RUN_MAIN_THREAD'] === '1'
 }
 
 function envModelUrl(): string | undefined {
@@ -508,6 +519,164 @@ function useMediapipeBackend(
   return { state, ensureReady, generate }
 }
 
+/* ─────────────── MediaPipe backend (main thread, worker bypass) ─────────────── */
+
+/**
+ * Sprint 11 task-4 fallback. VITE_LLM_RUN_MAIN_THREAD=1 옵트인 시만 활성.
+ *
+ * 워커가 silent-death 로 죽는 케이스 (task-2 trace 로도 root cause 잡지 못한
+ * 잔존 시나리오) 의 마지막 우회 경로. main thread 에서 MediaPipeLLM 을 직접
+ * 인스턴스화 → init/generate 호출. UI freeze 위험: generate 가 micro-task 를
+ * 점유해 React 렌더링이 멈출 수 있다. 옵트인 시 사용자에게 책임 이전.
+ *
+ * MediaPipe 모듈은 dynamic import 로 지연 로드 — 옵션 off (디폴트) 시 추가
+ * 번들 코스트 0, 워커 부트스트랩 패턴(llm.worker.ts 의 try/catch await import)
+ * 과 일관성을 위해 ensureReady 시점에서만 평가.
+ */
+function useMediapipeMainThreadBackend(
+  enabled: boolean,
+  modelUrlOption: string | undefined,
+): UseLLMResult {
+  const [state, setState] = useState<LLMState>({ status: 'idle' })
+
+  const llmRef = useRef<MediaPipeLLMType | null>(null)
+  const initPromiseRef = useRef<Promise<void> | null>(null)
+  const modelUrlRef = useRef<string | undefined>(modelUrlOption ?? envModelUrl())
+
+  useEffect(() => {
+    modelUrlRef.current = modelUrlOption ?? envModelUrl()
+  }, [modelUrlOption])
+
+  useEffect(() => {
+    if (!enabled) return
+    console.warn('[INSEOUL_LLM] main-thread:enabled (worker bypass — UI freeze risk)')
+    return () => {
+      try {
+        llmRef.current?.dispose()
+      } catch {
+        /* ignore dispose errors */
+      }
+      llmRef.current = null
+      initPromiseRef.current = null
+    }
+  }, [enabled])
+
+  const ensureReady = useCallback(async (): Promise<void> => {
+    if (state.status === 'ready') return
+    if (state.status === 'unsupported') {
+      throw new Error('WebGPU is not supported on this device')
+    }
+    if (initPromiseRef.current) return initPromiseRef.current
+
+    const url = modelUrlRef.current
+    if (!url) {
+      throw new Error('VITE_GEMMA_MODEL_URL is not configured')
+    }
+
+    setState({ status: 'downloading', progress: 0 })
+    console.warn('[INSEOUL_LLM] main-thread init posted', { url })
+    const promise = (async () => {
+      try {
+        const { MediaPipeLLM } = await import('../llm/mediapipe')
+        const llm = llmRef.current ?? new MediaPipeLLM()
+        llmRef.current = llm
+        await llm.init(
+          url,
+          (progress) => {
+            setState({ status: 'downloading', progress })
+          },
+          (stage, detail) => {
+            console.warn('[INSEOUL_LLM]', stage, detail ?? {})
+            // 워커 path 의 'loading' 메시지는 download 완료 직후 GPU 업로드 phase
+            // 시그널. main thread 에선 trace 가 'init:fetch-ok' 로 같은 시점을 알린다.
+            if (stage === 'init:fetch-ok') {
+              setState({ status: 'loading' })
+            }
+          },
+        )
+        setState({ status: 'ready' })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        // mediapipe.ts 가 'unsupported: ...' prefix 로 throw → status='unsupported' 매핑.
+        const status = message.startsWith('unsupported') ? 'unsupported' : 'error'
+        setState({ status, errorMessage: message })
+        throw err
+      }
+    })()
+    initPromiseRef.current = promise
+    try {
+      await promise
+    } finally {
+      initPromiseRef.current = null
+    }
+  }, [state.status])
+
+  const generate = useCallback(
+    async (
+      prompt: string,
+      onToken: (s: string) => void,
+      signal?: AbortSignal,
+    ): Promise<void> => {
+      const llm = llmRef.current
+      if (!llm) throw new Error('mediapipe (main thread) is not initialized')
+      if (state.status !== 'ready') throw new Error('LLM is not ready')
+      if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+
+      setState({ status: 'generating' })
+
+      // MediaPipe 콜백은 cumulative partial 을 줄 수도, delta 를 줄 수도 있다.
+      // worker path (llm.worker.ts) 와 동일한 delta 계산 로직을 그대로 재현.
+      let lastSent = ''
+      const ctx = { aborted: false }
+      const onAbort = () => {
+        ctx.aborted = true
+      }
+      if (signal) signal.addEventListener('abort', onAbort, { once: true })
+
+      try {
+        await llm.generate(prompt, (partial) => {
+          if (ctx.aborted) return
+          let delta: string
+          if (partial.startsWith(lastSent)) {
+            delta = partial.slice(lastSent.length)
+            lastSent = partial
+          } else {
+            delta = partial
+            lastSent = lastSent + partial
+          }
+          if (delta.length > 0) onToken(delta)
+        })
+        if (ctx.aborted) {
+          setState((prev) =>
+            prev.status === 'generating' ? { status: 'ready' } : prev,
+          )
+          throw new DOMException('aborted', 'AbortError')
+        }
+        setState((prev) =>
+          prev.status === 'generating' ? { status: 'ready' } : prev,
+        )
+      } catch (err) {
+        const isAbort =
+          err instanceof Error && (err.name === 'AbortError' || /aborted/i.test(err.message))
+        setState((prev) => {
+          if (prev.status !== 'generating') return prev
+          if (isAbort) return { status: 'ready' }
+          return {
+            status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+          }
+        })
+        throw err
+      } finally {
+        if (signal) signal.removeEventListener('abort', onAbort)
+      }
+    },
+    [state.status],
+  )
+
+  return { state, ensureReady, generate }
+}
+
 /* ─────────────────── 'none' backend (no LLM) ─────────────────── */
 
 function useNoneBackend(): UseLLMResult {
@@ -525,13 +694,24 @@ function useNoneBackend(): UseLLMResult {
 
 export function useLLM(options: UseLLMOptions = {}): UseLLMResult {
   const backend: BackendKind = options.backend ?? envBackend()
+  // mediapipe 백엔드 한정 — VITE_LLM_RUN_MAIN_THREAD=1 이면 worker 우회.
+  // ollama / none 은 영향 없음.
+  const mainThread = backend === 'mediapipe' && envRunMainThread()
+
   // hook 호출은 분기 없이 *모든* 백엔드를 호출해야 React 규칙을 지킨다.
   // 사용 안 하는 백엔드는 idle 상태로 흘러가고 부작용을 내지 않도록 작성됨.
   const ollama = useOllamaBackend(backend === 'ollama')
-  const mediapipe = useMediapipeBackend(backend === 'mediapipe', options.modelUrl)
+  const mediapipeWorker = useMediapipeBackend(
+    backend === 'mediapipe' && !mainThread,
+    options.modelUrl,
+  )
+  const mediapipeMain = useMediapipeMainThreadBackend(
+    backend === 'mediapipe' && mainThread,
+    options.modelUrl,
+  )
   const none = useNoneBackend()
 
   if (backend === 'ollama') return ollama
-  if (backend === 'mediapipe') return mediapipe
+  if (backend === 'mediapipe') return mainThread ? mediapipeMain : mediapipeWorker
   return none
 }
