@@ -1,0 +1,114 @@
+{
+  "sprint": 6,
+  "title": "Phase B UAT 인프라 정비 (실기기 path)",
+  "started_at": "2026-05-10T03:31:07Z",
+  "fork_point": "c139be3",
+  "max_pairs": 4,
+  "tasks": [
+    {
+      "n": 1,
+      "title": "실기기 빌드/install 자동화",
+      "branch": "task-1-impl",
+      "scope_files": [
+        "scripts/mobile-launch.sh",
+        "package.json"
+      ],
+      "accept_criteria": [
+        "npm run mobile:ios:device 신규 추가 — USB 연결 디바이스 자동 감지 (xcrun devicectl list devices, fallback xcodebuild -showdestinations)",
+        "npm run mobile:android:device 신규 추가 — adb devices 자동 감지, 다중 디바이스 시 첫 번째 또는 --device <serial>",
+        "기존 mobile:ios / mobile:android (시뮬레이터/에뮬레이터) 회귀 0",
+        "--dry-run 분기 동작 (CI/리뷰)",
+        "lint 0e/0w (ADR-S2-001 baseline 유지), test 회귀 0"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:3",
+      "review_ws": "workspace:4",
+      "status": "merged",
+      "review_round_pass": 1,
+      "merge_commit": "67282a2",
+      "integration_regression": {
+        "lint": "0e/0w",
+        "test": "128/128",
+        "build": "OK"
+      }
+    },
+    {
+      "n": 2,
+      "title": "실기기 메모리 측정 보강",
+      "branch": "task-2-impl",
+      "scope_files": [
+        "scripts/mobile-mem-measure.sh"
+      ],
+      "accept_criteria": [
+        "iOS 실기기 분기: xcrun devicectl device info processes 또는 instruments CLI 활용 (시뮬레이터 path 보존)",
+        "Android 실기기 분기: adb -s <serial> shell dumpsys meminfo <pkg> (현재는 -s 없이 shell 만 가정)",
+        "--device <udid|serial> 옵션 추가, 미지정 시 첫 가용 디바이스",
+        "시뮬레이터/에뮬레이터 path 회귀 0 (--samples, --interval, --label 동작 보존)",
+        "dry-run 출력 검증, lint 0e/0w, test 회귀 0"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:5",
+      "review_ws": "workspace:6",
+      "status": "round-2-impl",
+      "review_round_reject": 1,
+      "reject_findings": [
+        "android_mediapipe_loaded uses plain adb logcat (ADB_S not applied) — multi-device target mismatch",
+        "iOS real-device path emits null memory samples / peak=0 — no usable physical-device measurement"
+      ]
+    },
+    {
+      "n": 3,
+      "title": "UAT 결과 템플릿 + 수집 자동화",
+      "branch": "task-3-impl",
+      "scope_files": [
+        ".planning/sprint/6/uat-results-template.md",
+        "scripts/collate-uat.mjs",
+        "package.json"
+      ],
+      "accept_criteria": [
+        "UAT-CHECKLIST.md §기록양식 (iOS/Android) 을 그대로 반영한 .planning/sprint/6/uat-results-template.md 신규",
+        "scripts/collate-uat.mjs — uat-results.md 파싱 → Markdown 표 (host, model_download, peak_*_mb, rag_quality, issues) 출력",
+        "npm run uat:collate package.json scripts 추가",
+        "package.json scripts 섹션이 task-1 의 mobile:*:device 추가와 충돌하지 않도록 task-1 머지본 위에서 작업 (rebase 보장)",
+        "lint 0e/0w, test 회귀 0"
+      ],
+      "depends_on": [1],
+      "wave": 2,
+      "fork_point_override": "67282a2",
+      "impl_ws": "workspace:9",
+      "review_ws": "workspace:10",
+      "status": "dispatched"
+    },
+    {
+      "n": 4,
+      "title": "README 모바일 섹션 + troubleshooting 카탈로그",
+      "branch": "task-4-impl",
+      "scope_files": [
+        "README.md",
+        "docs/uat-troubleshooting.md"
+      ],
+      "accept_criteria": [
+        "README.md 모바일 섹션에 실기기 가이드 추가 (Xcode signing/team, USB 디버깅, 첫 trust)",
+        "docs/uat-troubleshooting.md 신규 — 에러 카탈로그 4건 이상 (cert untrusted, USB unauthorized, mediapipe 모델 다운로드 실패, OOM/메모리 부족) + 해결책",
+        "기존 README mobile 섹션과 일관 (mobile:* 스크립트 명칭 그대로 사용)",
+        "lint 0e/0w, test 회귀 0"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:7",
+      "review_ws": "workspace:8",
+      "status": "round-2-review",
+      "review_round_reject": 1,
+      "fork_point_override": "67282a2",
+      "rebase_note": "task-4 워크트리가 main 으로 rebase 되어 R2 base 갱신 (c139be3 → 67282a2). task-1 의 mobile:*:device script 흡수 후 impl 워커가 자율적으로 R2 commit (62fa077): npm script 가정 제거 + Capacitor CLI 직접 사용 (npx cap run ios/android --target).",
+      "round_2_impl_commit": "62fa077"
+    }
+  ],
+  "user_task": {
+    "n": 5,
+    "title": "실기기 UAT 실행 (사용자 손작업)",
+    "note": "워커 미디스패치. task-1~4 모두 pass 후 사용자가 iPhone/Android 실기기에서 UAT-CHECKLIST.md 절차 수행 → .planning/sprint/6/uat-results.md 작성 → /end 시 ADR-S6-001 + sprint-6.md 정리."
+  }
+}
