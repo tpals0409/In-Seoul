@@ -17,17 +17,29 @@ declare const self: DedicatedWorkerGlobalScope
 self.postMessage({ type: 'trace', stage: 'worker:bootstrap-start' } as WorkerOutMsg)
 
 self.addEventListener('error', (ev: ErrorEvent) => {
+  // ErrorEvent 의 error 필드는 spec 상 throw 한 객체. main 에서 stack 을 봐야
+  // silent-death root cause (e.g. wasm streaming compile fail) 를 짚을 수 있다.
+  const stack = ev.error instanceof Error ? ev.error.stack : undefined
   self.postMessage({
     type: 'trace',
     stage: 'worker:self-error',
-    detail: { message: ev.message, filename: ev.filename, lineno: ev.lineno },
+    detail: {
+      message: ev.message,
+      filename: ev.filename,
+      lineno: ev.lineno,
+      colno: ev.colno,
+      stack,
+    },
   } as WorkerOutMsg)
 })
 self.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
+  const reason = ev.reason
+  const message = reason instanceof Error ? reason.message : String(reason)
+  const stack = reason instanceof Error ? reason.stack : undefined
   self.postMessage({
     type: 'trace',
     stage: 'worker:unhandled-rejection',
-    detail: { reason: ev.reason instanceof Error ? ev.reason.message : String(ev.reason) },
+    detail: { message, stack },
   } as WorkerOutMsg)
 })
 
@@ -44,8 +56,11 @@ try {
     type: 'trace',
     stage: 'worker:import-mediapipe-throw',
     detail: {
+      phase: 'import-fail',
+      target: '@mediapipe/tasks-genai',
       message: err instanceof Error ? err.message : String(err),
       name: err instanceof Error ? err.name : undefined,
+      stack: err instanceof Error ? err.stack : undefined,
     },
   } as WorkerOutMsg)
   throw err
@@ -59,7 +74,10 @@ try {
   self.postMessage({
     type: 'trace',
     stage: 'worker:llm-instantiate-throw',
-    detail: { message: err instanceof Error ? err.message : String(err) },
+    detail: {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    },
   } as WorkerOutMsg)
   throw err
 }
