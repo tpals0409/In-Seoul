@@ -9,13 +9,18 @@ import { fileURLToPath, URL } from 'node:url'
  * `VITE_LLM_BACKEND` 미설정으로 useLLM 이 'none' 백엔드로 떨어져 모든 AI 응답이
  * template fallback 되는 결함을 빌드 시점에 차단한다.
  *
- * `apply: 'build'` 로 dev 서버/vitest 에는 영향 없음.
+ * 적용 범위:
+ *   - `apply: 'build'` → dev 서버/vitest 미적용.
+ *   - `mode !== 'production'` 인 빌드 (예: `vite build --mode development`,
+ *     storybook 빌드 등) 도 스킵. assertion 의 목적은 *production 산출물* 의
+ *     무결성이며, dev/preview 빌드를 깨뜨리면 안 된다 (R3 fix).
  */
 function assertLlmBackend(): Plugin {
   return {
     name: 'inseoul:assert-llm-backend',
     apply: 'build',
     config(_, { mode }) {
+      if (mode !== 'production') return
       const env = loadEnv(mode, process.cwd(), '')
       const raw = env['VITE_LLM_BACKEND']
       const allowed = ['ollama', 'mediapipe', 'none'] as const
