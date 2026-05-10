@@ -20,6 +20,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Sprint 9 task-2: shellcheck CI for scripts/*.sh (Sprint 8 carry-over).
+      # Scope locked to ./scripts to avoid scanning android/ ios/ vendor shells.
+      - name: Shellcheck (scripts/*.sh)
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+          scandir: './scripts'
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
