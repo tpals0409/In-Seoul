@@ -14,7 +14,7 @@
 
 **원인**
 - Free Apple ID (personal team) 로 서명한 앱은 iOS 가 첫 실행 시 자동 신뢰하지 않는다. 사용자가 단말 설정에서 명시적으로 신뢰해야 한다.
-- 7일 후 personal team cert 자체가 만료되어 같은 다이얼로그가 다시 뜬다 (재서명 + 재설치 필요).
+- 7일 후 personal team cert 자체가 만료되어 같은 다이얼로그가 다시 뜬다 (재서명 + 재설치 필요). Xcode 26.x 기준 personal team 의 provisioning profile 유효기간은 여전히 **7일** 로 고정 (paid Apple Developer Program 만 1년). 따라서 UAT 가 일주일 이상 늘어지면 *주 단위* 로 Xcode Run 재install 이 필요하다.
 
 **해결책**
 1. iPhone `설정 > 일반 > VPN 및 기기 관리` (구버전: `프로필 및 기기 관리`) 진입.
@@ -57,7 +57,9 @@
 - iOS 의 경우 sandbox 한도, Android 의 경우 `/data/data/<pkg>/files` 파티션 제약.
 
 **해결책**
-1. **네트워크 점검**: 단말을 VPN/사내망에서 분리 후 일반 셀룰러 또는 가정 Wi-Fi 로 재시도. `huggingface.co` / `storage.googleapis.com` 접근 가능해야 한다.
+1. **네트워크 점검**: 단말을 VPN/사내망에서 분리 후 일반 셀룰러 또는 가정 Wi-Fi 로 재시도. mediapipe 는 호스트 두 곳을 사용하며, *어느 한 쪽만 차단돼도* 실패하므로 두 호스트를 분리해서 점검:
+   - **`huggingface.co` 차단** (사내 정책에서 가장 흔함): 셀룰러 핫스팟 또는 가정 Wi-Fi 로 우회. 회사 VPN 의 SSL inspection 이 HuggingFace 의 LFS redirect 를 깨는 케이스가 있어 VPN 자체 분리도 시도. logcat / iOS log 의 `failed to download model` 직전 줄에 `huggingface.co` host 가 찍히면 이쪽.
+   - **`storage.googleapis.com` 차단** (GFE / Google CDN 차단 환경): mediapipe 의 일부 weight shard 는 Google CDN 에서 받는다. HuggingFace 가 풀려도 이쪽이 막히면 `HTTP 0 (timeout)` 이 다발한다. 회사 방화벽 allowlist 에 `*.googleapis.com` 추가 또는 셀룰러로 우회. timeout 자체가 짧다고 의심되면 `VITE_MEDIAPIPE_FETCH_TIMEOUT_MS` (또는 빌드 환경의 fetch timeout 설정) 를 평소의 2~3배로 올려 재빌드 후 재시도 — 모바일 셀룰러에서 수백 MB 다운로드는 5분 이상 걸릴 수 있다.
 2. **storage 확보**: 단말 `설정 > 저장공간` 에서 잔여 공간 ≥ 2 GB 확보 (사진/영상 정리, 다른 앱 캐시 삭제). Android 는 `adb shell df /data` 로 host 에서도 확인 가능.
 3. 둘 다 OK 인데 실패하면 앱을 완전히 삭제 후 재설치 (iOS: Xcode Run 또는 `npx cap run ios --target <UDID>` / Android: `npx cap run android --target <serial>`) — 부분 다운로드 캐시가 corrupt 일 수 있음.
 
@@ -78,6 +80,33 @@
 1. **백그라운드 앱 정리**: 단말의 멀티태스커에서 InSeoul 외 모든 앱을 swipe-out 한 뒤 재시도.
 2. **단말 재부팅**: 메모리 단편화/리크가 누적된 경우 효과적.
 3. **단말 사양이 부족**한 경우 (RAM ≤ 4 GB): 현재 sprint 에서는 회피책 없음 — Sprint 7+ 의 양자화/모델 경량화 (2B → 1B int4, 또는 distill) 트랙에서 다룬다. UAT 결과에 단말 모델 + RAM + 종료 시점 (`mobile:mem:*` JSON) 을 첨부하면 다음 sprint 우선순위에 반영.
+
+---
+
+## 5. LLM backend 미설정으로 production build 즉시 실패 (Sprint 8 P0 fix 후 동작)
+
+**증상**
+- `npm run build` (또는 `npx cap sync` 직전 build 단계) 가 다음 에러로 즉시 종료:
+  ```
+  [vite] assertLlmBackend: VITE_LLM_BACKEND is required for production builds
+  ```
+- 또는 더 일반적으로 `Error: VITE_LLM_BACKEND must be one of "mediapipe" | "ollama"` 가 vite.config.ts 호출 시 throw.
+- Capacitor sync 이전 단계에서 멈추므로 `ios/` / `android/` 의 `public/` 이 갱신되지 않고, Xcode / Android Studio 에서 띄워도 *이전 build* 가 잡혀 혼란.
+
+**원인**
+- Sprint 8 P0 fix (`feat(sprint-8/task-1) 6ede09e` + `fix(sprint-8/task-1) 51aec1d`) 로 `vite.config.ts` 의 `assertLlmBackend` 가 production 빌드에서 `VITE_LLM_BACKEND` 환경변수 존재를 fail-fast 로 강제. Sprint 7 Finding 5 (백엔드 미설정 → 모든 응답이 template fallback 으로 귀결됐는데 빌드는 성공해서 문제를 못 잡음) 회귀 방지용.
+- `.env.production` 가 누락됐거나, 변수 라인이 주석 처리됐거나, CI/빌드 환경에서 `VITE_LLM_BACKEND` 가 export 되지 않은 상태.
+
+**해결책**
+1. **`.env.production` 라인 한 줄 확인**: 저장소 루트에서
+   ```
+   cat .env.production | grep VITE_LLM_BACKEND
+   ```
+   결과가 `VITE_LLM_BACKEND=mediapipe` 또는 `VITE_LLM_BACKEND=ollama` 인지 확인. 없으면 한 줄 추가 후 다시 빌드.
+2. **빌드 환경 override**: CI / 호스팅 dashboard 에서 빌드를 돌릴 때는 `.env.production` 의 기본값 (`mediapipe`) 을 그대로 두고, 실제 모델 weight URL (`VITE_GEMMA_MODEL_URL`) 만 secret 으로 주입하는 패턴이 표준. ollama 로 override 하려면 빌드 명령 앞에 `VITE_LLM_BACKEND=ollama npm run build`.
+3. **template fallback 만 측정하고 싶을 때**: `VITE_LLM_BACKEND=mediapipe` 는 두되 `VITE_GEMMA_MODEL_URL` 은 비워두면 init 단계에서 throw → AiSheet 가 "템플릿 모드" 라벨 노출. 이 경우는 *의도적 fallback* 이므로 build 는 성공해야 정상 — `assertLlmBackend` 가 throw 하면 그건 backend 변수 자체가 없는 것이므로 1번부터 다시 점검.
+
+> 회귀 회피: UAT 측정 시작 전 항상 `.planning/sprint/<N>/uat-results.md` 의 *사전 점검* 블록을 먼저 통과시킨 뒤 측정에 들어간다.
 
 ---
 
