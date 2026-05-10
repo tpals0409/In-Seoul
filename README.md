@@ -422,6 +422,43 @@ npm run mobile:mem:android
 
 > **메모리 측정 권장 시점**: mediapipe 추론 *도중* 측정 (cold load + first inference 가 peak). 시뮬레이터/에뮬레이터 측정값은 host RAM 공유로 실기기와 다를 수 있음 — 실기기 비교 필수.
 
+### 실기기 빌드 (Sprint 6 — Phase B UAT)
+
+실제 iPhone / Android 단말에 설치해 mediapipe 추론과 메모리 사용량을 검증하는 단계. 시뮬레이터/에뮬레이터 (`mobile:ios` / `mobile:android`) 와 달리 **서명 (codesign)**, **USB 권한**, **첫 실행 신뢰** 단계가 추가된다.
+
+#### iPhone (iOS)
+1. **Apple ID 로 무료 dev cert 발급**
+   - Xcode 실행 → `ios/App/App.xcworkspace` 열기
+   - 좌측 navigator 에서 `App` target 선택 → `Signing & Capabilities` 탭
+   - `Team` 드롭다운에서 본인 Apple ID 선택 (없으면 `Add an Account...` 로 로그인 — 유료 개발자 계정 불필요, 7일 한정 personal team 으로 충분)
+   - `Bundle Identifier` 가 충돌하면 뒤에 `.dev` 같은 suffix 추가
+2. **USB 첫 trust + 개발자 앱 신뢰**
+   - Lightning/USB-C 케이블로 Mac 에 연결 → iPhone 에 "이 컴퓨터를 신뢰하시겠습니까?" 팝업 → **신뢰**
+   - Xcode Devices and Simulators (`⇧⌘2`) 에서 단말이 보이는지 확인
+   - 첫 install 후 앱 실행 시 "신뢰할 수 없는 개발자" 차단 → iPhone `설정 > 일반 > VPN 및 기기 관리 > 개발자 앱` 에서 본인 Apple ID 선택 후 **신뢰**
+3. **빌드 & 실행**
+   ```bash
+   npm run mobile:ios:device      # 연결된 실기기에 install + launch (Sprint 6 task-1)
+   ```
+
+#### Android
+1. **개발자 옵션 + USB 디버깅 ON**
+   - `설정 > 휴대전화 정보 > 빌드 번호` 7회 탭 → 개발자 모드 활성화
+   - `설정 > 개발자 옵션 > USB 디버깅` ON
+2. **adb 권한 승인**
+   - USB 케이블로 PC 연결 → 단말에 "USB 디버깅을 허용하시겠습니까?" 팝업 → **허용** (이 PC 항상 허용 체크 권장)
+   - 호스트에서 단말 인식 확인:
+     ```bash
+     adb devices       # <serial>    device  ← "device" 가 떠야 정상 (unauthorized / offline 이면 미허용)
+     ```
+3. **빌드 & 실행**
+   ```bash
+   npm run mobile:android:device  # 연결된 실기기에 install + launch (Sprint 6 task-1)
+   ```
+
+#### 흔한 막힘 → 해결책 카탈로그
+첫 UAT 사용자가 자주 마주치는 4 종 (cert untrusted / USB unauthorized / mediapipe 모델 다운로드 실패 / OOM) 은 [`docs/uat-troubleshooting.md`](docs/uat-troubleshooting.md) 에 증상 → 원인 → 해결책 형태로 정리.
+
 ### 상태
 - **Sprint 3** (종료): 환경 구축 + `cap sync` 통과 + 시뮬레이터/에뮬레이터 BUILD 확인 (caveat 해소).
 - **Sprint 4** (종료): main 통합 + 자동화 스크립트 (launch / trace / mem) + ADR-S4-001 (검증 파이프라인).
