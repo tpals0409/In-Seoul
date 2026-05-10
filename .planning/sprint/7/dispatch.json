@@ -1,0 +1,42 @@
+{
+  "sprint": 7,
+  "started_at": "2026-05-10",
+  "start_commit": "72e2ce4",
+  "mode": "no_workers",
+  "max_pairs": 0,
+  "rationale": "실기기 UAT 자체가 사용자 손작업 — 워커 부트스트랩 부적합. 사용자가 .planning/sprint/4/UAT-CHECKLIST.md task-4/5 절차로 iPhone+Android 실기기 UAT 수행, 결과를 .planning/sprint/7/uat-results.md 에 기록. /end 시점에 오케스트레이터가 collate + ADR-S7-001 + sprint-7.md 작성.",
+  "tasks": [
+    {
+      "n": 1,
+      "title": "iPhone 실기기 UAT (사용자 손작업)",
+      "owner": "user",
+      "checklist": ".planning/sprint/4/UAT-CHECKLIST.md#task-4",
+      "tools": ["npm run mobile:ios:device", "npm run mobile:mem:ios -- --device"],
+      "result_section": ".planning/sprint/7/uat-results.md#iOS",
+      "status": "pending"
+    },
+    {
+      "n": 2,
+      "title": "Android 실기기 UAT (사용자 손작업)",
+      "owner": "user",
+      "checklist": ".planning/sprint/4/UAT-CHECKLIST.md#task-5",
+      "tools": ["npm run mobile:android:device", "npm run mobile:mem:android -- --device"],
+      "result_section": ".planning/sprint/7/uat-results.md#Android",
+      "status": "pending"
+    },
+    {
+      "n": 3,
+      "title": "결과 수집 + ADR-S7-001 + sprint-7.md",
+      "owner": "orchestrator",
+      "trigger": "/end",
+      "depends_on": [1, 2],
+      "outputs": [
+        "docs/adr/ADR-S7-001-mobile-uat-results.md",
+        "docs/adr/sprints/sprint-7.md",
+        "README.md (실측 결과 추가)",
+        "sprint-window.md (Sprint 7 → [1] 완료, [2] 다음 미정)"
+      ],
+      "status": "pending"
+    }
+  ]
+}
