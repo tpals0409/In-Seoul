@@ -49,6 +49,12 @@ export interface WorkerOutLoadingMsg {
   type: 'loading'
 }
 
+export interface WorkerOutTraceMsg {
+  type: 'trace'
+  stage: string
+  detail?: Record<string, unknown> | undefined
+}
+
 export type WorkerOutMsg =
   | WorkerOutTokenMsg
   | WorkerOutDoneMsg
@@ -56,6 +62,7 @@ export type WorkerOutMsg =
   | WorkerOutProgressMsg
   | WorkerOutReadyMsg
   | WorkerOutLoadingMsg
+  | WorkerOutTraceMsg
 
 // =============================================================================
 // Main → Worker (input)

@@ -270,23 +270,36 @@ function useMediapipeBackend(
 
   useEffect(() => {
     if (!enabled) return
-    const worker = new Worker(
-      new URL('../worker/llm.worker.ts', import.meta.url),
-      { type: 'module' },
-    )
+    console.warn('[INSEOUL_LLM] worker:constructing')
+    let worker: Worker
+    try {
+      worker = new Worker(
+        new URL('../worker/llm.worker.ts', import.meta.url),
+        { type: 'module' },
+      )
+      console.warn('[INSEOUL_LLM] worker:constructed')
+    } catch (err) {
+      console.warn('[INSEOUL_LLM] worker:construct-throw', err instanceof Error ? err.message : String(err))
+      throw err
+    }
     workerRef.current = worker
     const pendingMap = pendingRef.current
 
     const onMessage = (ev: MessageEvent<WorkerOutMsg>) => {
       const msg = ev.data
       switch (msg.type) {
+        case 'trace':
+          console.warn('[INSEOUL_LLM]', msg.stage, msg.detail ?? {})
+          break
         case 'progress':
           setState({ status: 'downloading', progress: msg.progress })
           break
         case 'loading':
+          console.warn('[INSEOUL_LLM] state→loading (download done, GPU upload)')
           setState({ status: 'loading' })
           break
         case 'ready': {
+          console.warn('[INSEOUL_LLM] state→ready')
           setState({ status: 'ready' })
           const resolve = initResolveRef.current
           initResolveRef.current = null
@@ -318,6 +331,7 @@ function useMediapipeBackend(
         }
         case 'error': {
           const message = msg.message
+          console.warn('[INSEOUL_LLM] worker error', { code: msg.code, message })
           if (msg.code === 'unsupported' || msg.code === 'init-failed') {
             const status = msg.code === 'unsupported' ? 'unsupported' : 'error'
             setState({ status, errorMessage: message })
@@ -344,6 +358,11 @@ function useMediapipeBackend(
     }
 
     const onError = (ev: ErrorEvent) => {
+      console.warn('[INSEOUL_LLM] worker onerror', {
+        message: ev.message,
+        filename: ev.filename,
+        lineno: ev.lineno,
+      })
       setState({ status: 'error', errorMessage: ev.message })
       const reject = initRejectRef.current
       initResolveRef.current = null
@@ -402,6 +421,7 @@ function useMediapipeBackend(
     })
     initPromiseRef.current = promise
     setState({ status: 'downloading', progress: 0 })
+    console.warn('[INSEOUL_LLM] init posted', { url })
     const initMsg: WorkerInMsg = { type: 'init', modelUrl: url }
     worker.postMessage(initMsg)
     try {

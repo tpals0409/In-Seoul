@@ -223,11 +223,17 @@ function AiSheetBody() {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const askInFlightRef = useRef<AbortController | null>(null)
 
-  // 시트가 열릴 때(=mount) 모델 ready 시도. 미설정·미지원 환경에선 즉시 거부되어
-  // 폴백 모드(템플릿)로 흐른다.
+  // 시트가 열릴 때(=mount) 모델 ready 시도. AdvisorProvider 가 launch 시점에 이미
+  // 호출했지만, sheet remount/unmount 시 idempotency 보존 + ref guard 로 한 번만.
+  const ensureReadyOnceRef = useRef(false)
   useEffect(() => {
-    advisor.ensureReady().catch(() => {
-      /* unsupported / no model URL — handled via state.llm.status */
+    if (ensureReadyOnceRef.current) return
+    ensureReadyOnceRef.current = true
+    advisor.ensureReady().catch((err) => {
+      console.warn(
+        '[INSEOUL_LLM] ensureReady rejected',
+        err instanceof Error ? err.message : String(err),
+      )
     })
   }, [advisor])
 
