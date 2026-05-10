@@ -5,15 +5,21 @@
 import { FilesetResolver, LlmInference } from '@mediapipe/tasks-genai'
 import type { GenerateOptions } from './types'
 
-const MEDIAPIPE_WASM_BASE =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai/wasm'
+// Sprint 11 task-1: 외부 CDN 의존 제거 — `public/wasm/` 으로 prebuild 시 복사된
+// wasm/loader 6 파일을 dist root 에서 절대 경로로 로드한다. WKWebView 의
+// cross-origin wasm streaming 정책 / CDN cache 변동으로 인한 'ModuleFactory not
+// set.' 무한 루프 (Sprint 10 핸드오프 fix 후보 A) 해소.
+const MEDIAPIPE_WASM_BASE = '/wasm'
 
 // VITE_GEMMA_MODEL_URL 의 호스트가 이 목록에 없으면 거부한다.
-// jsdelivr.net / huggingface.co — 정식 모델 배포 채널.
+// huggingface.co — 정식 모델 배포 채널 (Sprint 11 부터 단일화).
 // localhost / 127.0.0.1 — 개발/오프라인 자체 호스팅.
 // 사용자가 명시적으로 다른 호스트를 허용하려면 VITE_ALLOW_CUSTOM_MODEL_HOST=1 설정.
+//
+// Sprint 11 task-1: 외부 npm CDN 호스트를 화이트리스트에서 제거 — Sprint 10 finding
+// (WKWebView cross-origin wasm streaming + CDN cache 변동) 와 동일 risk surface 가
+// 모델 fetch 에도 적용되므로 권장 채널만 남긴다.
 export const MODEL_HOST_WHITELIST: readonly string[] = [
-  'jsdelivr.net',
   'huggingface.co',
   'localhost',
   '127.0.0.1',

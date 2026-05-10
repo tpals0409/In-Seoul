@@ -1,0 +1,7 @@
+# Sprint 11 task-1: vendored MediaPipe wasm/loader 산출물.
+#
+# 이 디렉토리는 `npm run prebuild` (= scripts/copy-mediapipe-wasm.sh) 가 매번
+# node_modules/@mediapipe/tasks-genai/wasm/ 에서 복사한다.
+# Git 추적은 .gitignore 자기 자신만; 6 파일 (~75MB) 은 커밋하지 않는다.
+*
+!.gitignore
