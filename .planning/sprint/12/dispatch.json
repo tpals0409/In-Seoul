@@ -1,0 +1,55 @@
+{
+  "sprint": 12,
+  "title": "모델 다운로드 stall 진단 강화 + 빌드 체인 hardening (UAT 후속)",
+  "started_at": "2026-05-10T20:48:00+09:00",
+  "start_commit": "cf62830",
+  "max_pairs": 4,
+  "trigger": {
+    "source": "iOS 26.4 시뮬레이터 (iPhone 17 Pro) AI 시트 진입",
+    "symptom": "배지 '모델 다운로드 0%' stall, simctl 로그에 [INSEOUL_LLM] trace 0건",
+    "diagnosis": [
+      "ios/App/App/public/assets/mediapipe-*.js 가 jsdelivr URL 사용 — Sprint 11 task-1 (wasm self-host) 미반영 stale 번들",
+      "public/wasm/ 가 .gitignore 만 존재 — prebuild (copy-mediapipe-wasm.sh) 미실행",
+      "dist/wasm/ 도 미생성"
+    ]
+  },
+  "tasks": [
+    {
+      "n": 1,
+      "title": "빌드 체인 hardening (npm run build 명시 chain + vite plugin assertWasmCopied + check-bundle.sh 검증 step)",
+      "scope_files": ["package.json", "vite.config.ts", "scripts/check-bundle.sh", "src/__tests__/vite-assert-wasm-copied.test.ts"],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:35",
+      "review_ws": "workspace:36",
+      "prompt_impl": ".planning/sprint/12/prompts/task-1-impl.md",
+      "prompt_review": ".planning/sprint/12/prompts/task-1-review.md",
+      "status": "dispatched"
+    },
+    {
+      "n": 2,
+      "title": "fetchModelWithProgress trace 강화 + idle timeout (download:* stages, AbortController 30s)",
+      "scope_files": ["src/ai/llm/mediapipe.ts", "src/ai/worker/llm.worker.ts", "src/ai/llm/__tests__/mediapipe.test.ts", "src/ai/llm/types.ts"],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:37",
+      "review_ws": "workspace:38",
+      "prompt_impl": ".planning/sprint/12/prompts/task-2-impl.md",
+      "prompt_review": ".planning/sprint/12/prompts/task-2-review.md",
+      "status": "dispatched"
+    },
+    {
+      "n": 3,
+      "title": "docs/uat-troubleshooting.md 갱신 — '다운로드 0% stuck' 시나리오 + stale bundle 식별 + sim/실기기 매트릭스 + simctl 디버그 명령",
+      "scope_files": ["docs/uat-troubleshooting.md", "docs/llm-debugging.md"],
+      "depends_on": [1, 2],
+      "wave": 2,
+      "wave_2_base": "579a63c",
+      "impl_ws": "workspace:39",
+      "review_ws": "workspace:40",
+      "prompt_impl": ".planning/sprint/12/prompts/task-3-impl.md",
+      "prompt_review": ".planning/sprint/12/prompts/task-3-review.md",
+      "status": "dispatched"
+    }
+  ]
+}
