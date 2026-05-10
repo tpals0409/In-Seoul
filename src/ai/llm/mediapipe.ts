@@ -33,8 +33,22 @@ export const MODEL_HOST_WHITELIST: readonly string[] = [
 // 초과 시 임의의 거대 바이너리를 LLM 모델로 로드하려는 시도일 가능성이 크다.
 export const MODEL_MAX_BYTES = 2 * 1024 * 1024 * 1024
 
+// Sprint 12 task-2: 첫 chunk 도달 후 chunk-to-chunk 무응답 임계값. iOS UAT 에서
+// 0% stall 의 root cause 식별을 위해 watchdog timeout 추가. 초과 시 download:idle-
+// timeout trace + init-failed 로 명시적 throw.
+export const DOWNLOAD_IDLE_TIMEOUT_MS = 30_000
+
 export type ProgressCallback = (progress: number) => void
 export type TokenCallback = (deltaText: string, done: boolean) => void
+export type DownloadTraceCallback = (
+  stage: string,
+  detail?: Record<string, unknown>,
+) => void
+
+export interface FetchModelOptions {
+  /** Override DOWNLOAD_IDLE_TIMEOUT_MS — 단위 테스트에서 짧게 설정. */
+  idleTimeoutMs?: number
+}
 
 declare global {
   interface Navigator {
@@ -112,21 +126,47 @@ export function assertContentLength(header: string | null): void {
   }
 }
 
+const MILESTONE_BOUNDARIES: readonly number[] = [0.10, 0.25, 0.50, 0.75, 0.90]
+
 /**
  * Fetch the model with progress reporting. Returns a Uint8Array suitable for
  * `LlmInference.createFromModelBuffer`. We do this manually because MediaPipe's
  * `createFromModelPath` does not expose download progress.
+ *
+ * Sprint 12 task-2: onTrace 콜백 + idle timeout 추가. iOS UAT 0% stall 의 root
+ * cause 식별을 위해 download lifecycle 의 6 단계 (request-start / response /
+ * first-chunk / milestone / complete / idle-timeout) 를 emit. first-chunk 이후
+ * chunk-to-chunk 간격이 idleTimeoutMs (기본 30s) 초과 시 throw.
  */
 export async function fetchModelWithProgress(
   modelUrl: string,
   onProgress: ProgressCallback,
+  onTrace?: DownloadTraceCallback,
+  options?: FetchModelOptions,
 ): Promise<Uint8Array> {
+  const idleTimeoutMs = options?.idleTimeoutMs ?? DOWNLOAD_IDLE_TIMEOUT_MS
+  const trace = onTrace ?? ((): void => undefined)
+
   assertAllowedModelHost(modelUrl)
-  const res = await fetch(modelUrl)
+
+  const startTime = Date.now()
+  trace('download:request-start', { modelUrl })
+
+  const ac = new AbortController()
+  const res = await fetch(modelUrl, { signal: ac.signal })
+
+  const totalHeader = res.headers.get('content-length')
+  trace('download:response', {
+    status: res.status,
+    ok: res.ok,
+    contentLength: totalHeader,
+    urlAfterRedirect: res.url,
+  })
+
   if (!res.ok) {
     throw new Error(`init-failed: model fetch failed (${res.status})`)
   }
-  const totalHeader = res.headers.get('content-length')
+
   assertContentLength(totalHeader)
   const total = totalHeader ? Number.parseInt(totalHeader, 10) : 0
   const body = res.body
@@ -139,33 +179,112 @@ export async function fetchModelWithProgress(
       )
     }
     onProgress(1)
+    trace('download:complete', {
+      totalBytes: buf.byteLength,
+      elapsedMs: Date.now() - startTime,
+    })
     return new Uint8Array(buf)
   }
+
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let received = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value) {
-      chunks.push(value)
-      received += value.byteLength
-      // Defense-in-depth: 헤더가 거짓을 말하더라도 누적 바이트가 cap 을 넘으면 중단.
-      if (received > MODEL_MAX_BYTES) {
-        try {
-          await reader.cancel()
-        } catch {
-          // ignore
-        }
-        throw new Error(
-          `init-failed: model stream exceeded limit ${MODEL_MAX_BYTES} bytes`,
-        )
+  let firstChunkSeen = false
+  const milestonesEmitted = new Set<number>()
+
+  // Idle watchdog. armed only after the first chunk arrives. setTimeout-based
+  // race: the rejection promise wins if no chunk lands within idleTimeoutMs.
+  let idleTimer: ReturnType<typeof setTimeout> | null = null
+  let idleFired = false
+  let idleReject: ((err: Error) => void) | null = null
+  const idlePromise = new Promise<never>((_, reject) => {
+    idleReject = reject
+  })
+  // 정상 경로에서 idlePromise 가 reject 되지 않으면 unhandled rejection 경고를
+  // 막기 위해 noop catch 를 등록. race 에서 reject 시점엔 실제 catch 가 잡는다.
+  idlePromise.catch(() => undefined)
+
+  const armIdle = (): void => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => {
+      idleFired = true
+      trace('download:idle-timeout', {
+        idleMs: idleTimeoutMs,
+        lastByte: received,
+      })
+      try {
+        ac.abort()
+      } catch {
+        // ignore
       }
-      if (total > 0) {
-        onProgress(Math.min(0.999, received / total))
-      }
+      reader.cancel().catch(() => undefined)
+      idleReject?.(
+        new Error(
+          `init-failed: download stalled (no chunk for ${idleTimeoutMs}ms)`,
+        ),
+      )
+    }, idleTimeoutMs)
+  }
+  const disarmIdle = (): void => {
+    if (idleTimer) {
+      clearTimeout(idleTimer)
+      idleTimer = null
     }
   }
+
+  try {
+    for (;;) {
+      let result: ReadableStreamReadResult<Uint8Array>
+      try {
+        result = await Promise.race([reader.read(), idlePromise])
+      } catch (err) {
+        if (idleFired) {
+          throw err instanceof Error
+            ? err
+            : new Error(`init-failed: download stalled (no chunk for ${idleTimeoutMs}ms)`)
+        }
+        throw err
+      }
+      const { done, value } = result
+      if (done) break
+      if (value) {
+        chunks.push(value)
+        received += value.byteLength
+        if (!firstChunkSeen) {
+          firstChunkSeen = true
+          trace('download:first-chunk', {
+            byteLength: value.byteLength,
+            elapsedMs: Date.now() - startTime,
+          })
+        }
+        armIdle()
+        // Defense-in-depth: 헤더가 거짓을 말하더라도 누적 바이트가 cap 을 넘으면 중단.
+        if (received > MODEL_MAX_BYTES) {
+          try {
+            await reader.cancel()
+          } catch {
+            // ignore
+          }
+          throw new Error(
+            `init-failed: model stream exceeded limit ${MODEL_MAX_BYTES} bytes`,
+          )
+        }
+        if (total > 0) {
+          const progress = Math.min(0.999, received / total)
+          onProgress(progress)
+          for (const m of MILESTONE_BOUNDARIES) {
+            if (progress >= m && !milestonesEmitted.has(m)) {
+              milestonesEmitted.add(m)
+              trace('download:milestone', { progress: m, received })
+            }
+          }
+        }
+      }
+    }
+  } finally {
+    disarmIdle()
+  }
+
   onProgress(1)
   // Concatenate chunks.
   const out = new Uint8Array(received)
@@ -174,6 +293,10 @@ export async function fetchModelWithProgress(
     out.set(c, offset)
     offset += c.byteLength
   }
+  trace('download:complete', {
+    totalBytes: out.byteLength,
+    elapsedMs: Date.now() - startTime,
+  })
   return out
 }
 
@@ -183,7 +306,7 @@ export class MediaPipeLLM {
   async init(
     modelUrl: string,
     onProgress: ProgressCallback,
-    onTrace?: (stage: string, detail?: Record<string, unknown>) => void,
+    onTrace?: DownloadTraceCallback,
   ): Promise<void> {
     const trace = onTrace ?? (() => undefined)
     trace('init:enter', { modelUrl, wasmBase: MEDIAPIPE_WASM_BASE })
@@ -196,7 +319,7 @@ export class MediaPipeLLM {
 
     const fileset = await FilesetResolver.forGenAiTasks(MEDIAPIPE_WASM_BASE)
     trace('init:fileset-ok')
-    const modelBuffer = await fetchModelWithProgress(modelUrl, onProgress)
+    const modelBuffer = await fetchModelWithProgress(modelUrl, onProgress, onTrace)
     trace('init:fetch-ok', { byteLength: modelBuffer.byteLength })
 
     try {
