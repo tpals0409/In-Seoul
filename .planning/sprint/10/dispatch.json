@@ -1,0 +1,43 @@
+{
+  "sprint": 10,
+  "title": "Xcode 로 다시 테스트 진행 (실기기 UAT 본 수행)",
+  "started_at": "2026-05-10T00:00:00+09:00",
+  "start_commit": "679ce37",
+  "max_pairs": 4,
+  "tasks": [
+    {
+      "n": 1,
+      "title": "Xcode 통한 iOS 실기기 UAT 본 수행 (사용자 손작업)",
+      "scope_files": [
+        ".planning/sprint/10/uat-results.md"
+      ],
+      "depends_on": [2],
+      "track": "user-manual",
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "pending-user",
+      "notes": "task-2 가 템플릿을 작성한 후 사용자가 측정값 채움. cmux 디스패치 안 함."
+    },
+    {
+      "n": 2,
+      "title": "UAT 인프라 정비 — sprint 10 결과 템플릿 신규 + troubleshooting 갱신",
+      "scope_files": [
+        ".planning/sprint/10/uat-results.md",
+        "docs/uat-troubleshooting.md"
+      ],
+      "depends_on": [],
+      "track": "cmux",
+      "impl_ws": "workspace:25",
+      "review_ws": "workspace:26",
+      "status": "dispatched"
+    }
+  ],
+  "carry_over": [
+    {
+      "from_sprint": 9,
+      "task": "cmux 워커 worktree 분리 (/start skill 메타 작업)",
+      "to": "Sprint 11+ 별도 세션",
+      "reason": "메타 작업이라 자기 자신 수정하면서 cmux 워커 띄우면 위험"
+    }
+  ]
+}
