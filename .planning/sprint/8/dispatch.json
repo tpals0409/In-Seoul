@@ -1,0 +1,76 @@
+{
+  "sprint": 8,
+  "started_at": "2026-05-10T05:46:32Z",
+  "ended_at": "2026-05-10T07:10:00Z",
+  "start_commit": "02863dd",
+  "end_commit": "29837c9",
+  "mode": "mixed",
+  "max_pairs": 4,
+  "notes": [
+    "Sprint 7 finding 5건 (P0~P3) 정리 + Phase B 실기기 UAT 재시도.",
+    "review 워커는 -s workspace-write 로 부팅 (read-only 가 cmux IPC + 파일 쓰기 모두 차단하는 함정 발견 — Sprint 8 신규 메모 등록).",
+    "task-5 (실기기 UAT) 는 사용자 손작업으로 분리, depends_on=[1,2,3]. cmux 워커 미사용. Sprint 9 이월.",
+    "cmux 공유 워킹트리 race 발생 → impl 워커들이 git plumbing (commit-tree + update-ref) 으로 복구. feedback_cmux_worktree.md 보강 후보.",
+    "task-1 R2 결과: stale evidence 무효화 + 새 finding (vite plugin mode 가드) → R3 fix 후 pass."
+  ],
+  "tasks": [
+    {
+      "n": 1,
+      "title": "P0: .env.production + LLM backend fail-fast (Finding 5)",
+      "scope_files": [".env.example", ".env.production", "vite.config.ts"],
+      "depends_on": [],
+      "impl_ws": "workspace:11",
+      "review_ws": "workspace:19",
+      "status": "pass",
+      "rounds": 3,
+      "impl_commits": ["6ede09e", "51aec1d"],
+      "merge_commit_into_main": "via --no-ff merge"
+    },
+    {
+      "n": 2,
+      "title": "P1: TweaksPanel App.tsx 가드 + DEV 가드 메커니즘 + bundle grep CI (Finding 2 + 3)",
+      "scope_files": ["src/App.tsx", "package.json", "scripts/check-bundle.sh", "src/dev/TweaksPanel.tsx"],
+      "depends_on": [],
+      "impl_ws": "workspace:13",
+      "review_ws": "workspace:20",
+      "status": "pass",
+      "rounds": 1,
+      "impl_commits": ["a1dcdcf"],
+      "merge_commit_into_main": "via --no-ff merge"
+    },
+    {
+      "n": 3,
+      "title": "P2: iOS pinch-zoom 4-layer guard (Finding 4)",
+      "scope_files": ["index.html", "src/main.tsx", "src/index.css", "capacitor.config.ts"],
+      "depends_on": [],
+      "impl_ws": "workspace:15",
+      "review_ws": "workspace:21",
+      "status": "pass",
+      "rounds": 1,
+      "impl_commits": ["03897fe"],
+      "merge_commit_into_main": "via --no-ff merge"
+    },
+    {
+      "n": 4,
+      "title": "P3: mobile-launch.sh:157 SwiftPM 잔여 fix (Finding 1 잔여)",
+      "scope_files": ["scripts/mobile-launch.sh"],
+      "depends_on": [],
+      "impl_ws": "workspace:17",
+      "review_ws": "workspace:22",
+      "status": "pass",
+      "rounds": 2,
+      "impl_commits": ["ac801e5"],
+      "merge_commit_into_main": "via --no-ff merge"
+    },
+    {
+      "n": 5,
+      "title": "Sprint 4 Phase B 실기기 UAT 본 수행 (사용자 손작업)",
+      "scope_files": [],
+      "depends_on": [1, 2, 3],
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "deferred_to_sprint_9",
+      "rationale": "실기기 UAT 는 손작업 (feedback_simulator_smoke_for_uat.md). cmux 워커 부적합. depends_on 모두 pass 완료, Sprint 9 첫 task 로 등록 예정."
+    }
+  ]
+}
