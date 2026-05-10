@@ -1,0 +1,113 @@
+{
+  "sprint": 11,
+  "started_at": "2026-05-10T19:41:55+0900",
+  "max_pairs": 4,
+  "start_commit": "45ec2c9",
+  "base_branch": "sprint-10-llm-debug",
+  "base_commit": "f67f3f1",
+  "policy": {
+    "device_build_required": false,
+    "static_review_first": true,
+    "acceptance": "lint + npm test pass + commit",
+    "merge_gate": "review-file frontmatter status: pass"
+  },
+  "tasks": [
+    {
+      "n": 1,
+      "title": "wasm 자체 호스팅 — jsdelivr CDN 의존 제거",
+      "scope_files": [
+        "vite.config.ts",
+        "package.json",
+        "src/ai/llm/mediapipe.ts",
+        "scripts/copy-mediapipe-wasm.sh",
+        "public/wasm/.gitignore"
+      ],
+      "accept_criteria": [
+        "node_modules/@mediapipe/tasks-genai/wasm/ 6 파일을 public/wasm/ 으로 복사하는 prebuild 스크립트 존재",
+        "MEDIAPIPE_WASM_BASE 가 '/wasm' (relative) 또는 빌드 타임 상수로 변경",
+        "vite build dist 에 6 wasm 파일 inline (build 산출 검증 또는 단위 테스트)",
+        "package.json prebuild/postinstall 스크립트 hook 추가",
+        "lint + npm test pass",
+        "ungated runtime: jsdelivr CDN 호출 없음 (정적 grep 으로 mediapipe.ts 에 jsdelivr URL 0건)"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:27",
+      "review_ws": "workspace:28",
+      "status": "pass"
+    },
+    {
+      "n": 2,
+      "title": "silent death 진단 강화 — worker.onerror + Capacitor console forward",
+      "scope_files": [
+        "src/ai/worker/llm.worker.ts",
+        "src/ai/hooks/useLLM.ts",
+        "capacitor.config.ts",
+        "docs/llm-debugging.md"
+      ],
+      "accept_criteria": [
+        "main thread useLLM.ts 의 worker.onerror / onmessageerror 가 [INSEOUL_LLM] 접두 trace 포워드",
+        "worker top-level 에서 import 실패도 self.onerror 핸들러로 catch + postMessage('trace', {phase: 'import-fail', err})",
+        "capacitor.config.ts CapacitorConsole/CapConsole plugin 활성 (이미 활성이면 정적 검증)",
+        "docs/llm-debugging.md 신규 — trace map: ensureReady → worker:constructing → bootstrap-start → before-import → after-import → llm-instantiated → init:enter → host-ok → ...",
+        "lint + npm test pass",
+        "Vitest 로 worker.onerror 트리거 시 trace 가 onMessage 로 전달되는지 mock 단위 테스트 1건 추가"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:29",
+      "review_ws": "workspace:30",
+      "status": "pass"
+    },
+    {
+      "n": 3,
+      "title": "AdvisorContext / AiSheet race 정적 재점검 + 핸드오프 갱신",
+      "scope_files": [
+        "src/ai/AdvisorContext.tsx",
+        "src/screens/sheets/AiSheet.tsx",
+        ".planning/sprint/11/static-review.md"
+      ],
+      "accept_criteria": [
+        "AdvisorContext mount eager init 이 strict-mode double-invoke 에서도 단일 ensureReady 호출 보장 (정적 분석 + 단위 테스트로 ref guard 검증)",
+        "AiSheet ensureReadyOnceRef 가 mount/unmount 사이클 통과 후 재호출 0건 보장 (정적 분석)",
+        ".planning/sprint/11/static-review.md 신규 — 함수별 race window 표 + 결론 (변경 필요 여부)",
+        "코드 변경이 필요한 경우만 src 수정, 변경 없으면 분석 보고서만 commit",
+        "lint + npm test pass"
+      ],
+      "depends_on": [],
+      "wave": 1,
+      "impl_ws": "workspace:31",
+      "review_ws": "workspace:32",
+      "status": "pass"
+    },
+    {
+      "n": 4,
+      "title": "main thread mediapipe fallback 분기 (off-by-default)",
+      "scope_files": [
+        "src/ai/llm/mediapipe.ts",
+        "src/ai/hooks/useLLM.ts",
+        "src/ai/AdvisorContext.tsx",
+        ".env.local.example"
+      ],
+      "accept_criteria": [
+        "VITE_LLM_RUN_MAIN_THREAD=1 일 때 worker 우회, main thread 에서 mediapipe LlmInference 직접 사용",
+        "기본값 off — 기존 worker path 회귀 0건 (단위 테스트로 분기 검증)",
+        ".env.local.example 에 옵션 키 + 주석 추가",
+        "lint + npm test pass",
+        "main thread fallback 활성 시 UI freeze 위험 명시 — docs 또는 코드 주석 1줄"
+      ],
+      "depends_on": [
+        1,
+        2,
+        3
+      ],
+      "wave": 2,
+      "impl_ws": "workspace:33",
+      "review_ws": "workspace:34",
+      "status": "pass",
+      "wave1_merge_head": "09db997"
+    }
+  ],
+  "completed_at": "2026-05-10T20:25:00+0900",
+  "end_commit": "f9820a9"
+}
