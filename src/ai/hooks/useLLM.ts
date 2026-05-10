@@ -357,11 +357,18 @@ function useMediapipeBackend(
       }
     }
 
+    // worker 가 silent death 로 죽으면 main thread `error` 이벤트가 유일한 단서.
+    // worker 측 self.addEventListener('error') 가 postMessage 로 보조 trace 를
+    // 보내지만 worker module evaluation 자체가 throw 하면 그 핸들러도 못 띄움 —
+    // ErrorEvent 모든 필드 + error.stack 을 main console 에 박는 게 최후 단서.
     const onError = (ev: ErrorEvent) => {
-      console.warn('[INSEOUL_LLM] worker onerror', {
+      const stack = ev.error instanceof Error ? ev.error.stack : undefined
+      console.error('[INSEOUL_LLM] worker.onerror', {
         message: ev.message,
         filename: ev.filename,
         lineno: ev.lineno,
+        colno: ev.colno,
+        stack,
       })
       setState({ status: 'error', errorMessage: ev.message })
       const reject = initRejectRef.current
@@ -375,12 +382,27 @@ function useMediapipeBackend(
       pendingRef.current.clear()
     }
 
+    // structured-clone 실패로 message 가 deserialize 안 되는 케이스 (Worker spec).
+    // ErrorEvent 가 아니라 일반 Event 라 message 필드 없음 — 발생 자체를 기록.
+    const onMessageError = (ev: Event) => {
+      console.error('[INSEOUL_LLM] worker.onmessageerror', {
+        type: ev.type,
+        timeStamp: ev.timeStamp,
+      })
+      setState({
+        status: 'error',
+        errorMessage: 'worker message deserialization failed',
+      })
+    }
+
     worker.addEventListener('message', onMessage)
     worker.addEventListener('error', onError)
+    worker.addEventListener('messageerror', onMessageError)
 
     return () => {
       worker.removeEventListener('message', onMessage)
       worker.removeEventListener('error', onError)
+      worker.removeEventListener('messageerror', onMessageError)
       try {
         const dispose: WorkerInMsg = { type: 'dispose' }
         worker.postMessage(dispose)
