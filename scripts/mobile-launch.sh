@@ -154,8 +154,17 @@ setup_android_env() {
 # trailing-comma match. Generic-device placeholders are excluded by UDID
 # regex (must be 8+ hex chars, optionally one dash and more hex).
 pick_ios_device_udid() {
-  xcodebuild -workspace ios/App/App.xcworkspace -scheme App \
-    -showdestinations 2>/dev/null \
+  # iOS uses SwiftPM (no .xcworkspace), so -project. Capture stderr too:
+  # silent xcodebuild failures (stale toolchain, missing scheme) would
+  # otherwise emit an empty UDID indistinguishable from "no device" and
+  # surface downstream as a misleading "no USB-connected device" error.
+  local destinations
+  if ! destinations=$(xcodebuild -project ios/App/App.xcodeproj -scheme App \
+                      -showdestinations 2>&1); then
+    printf 'warn: xcodebuild -showdestinations failed:\n%s\n' "$destinations" >&2
+    return 0
+  fi
+  printf '%s\n' "$destinations" \
     | grep 'platform:iOS,' \
     | sed -E 's/.*id:([^,}]+).*/\1/' \
     | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
