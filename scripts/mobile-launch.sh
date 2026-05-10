@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# mobile-launch.sh — boot simulator/emulator, sync Capacitor, build, install, launch.
+# mobile-launch.sh — boot simulator/emulator (or target USB device), sync
+# Capacitor, build, install, launch.
 #
 # Usage:
-#   scripts/mobile-launch.sh ios|android [--device <name>] [--dry-run] [--help]
+#   scripts/mobile-launch.sh <platform> [--device <id>] [--dry-run] [--help]
 #
 # --dry-run echoes every command instead of executing it; nothing is booted.
 
@@ -24,18 +25,23 @@ usage() {
 Usage: scripts/mobile-launch.sh <platform> [options]
 
 Platforms:
-  ios       Boot iOS Simulator, build, install, launch.
-  android   Boot Android Emulator, build, install, launch.
+  ios              Boot iOS Simulator, build, install, launch.
+  android          Boot Android Emulator, build, install, launch.
+  ios-device       Build, install, launch on USB-connected iPhone (real device).
+  android-device   Build, install, launch on USB-connected Android (real device).
 
 Options:
-  --device <name>   Specific simulator/AVD name (default: first available).
-  --dry-run         Echo commands; do not boot devices or run builds.
-  --help            Show this help.
+  --device <id>    Simulator/AVD name (sim mode) or UDID/serial (device mode).
+                   Defaults to first available.
+  --dry-run        Echo commands; do not boot devices or run builds.
+  --help           Show this help.
 
 Examples:
   scripts/mobile-launch.sh ios
   scripts/mobile-launch.sh android --device Pixel_6_API_34
-  scripts/mobile-launch.sh ios --dry-run
+  scripts/mobile-launch.sh ios-device
+  scripts/mobile-launch.sh android-device --device R5CT123ABCD
+  scripts/mobile-launch.sh ios-device --dry-run
 EOF
 }
 
@@ -46,7 +52,7 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    ios|android)
+    ios|android|ios-device|android-device)
       if [[ -n "$PLATFORM" ]]; then
         echo "error: platform already set to '$PLATFORM'" >&2
         exit 2
@@ -79,7 +85,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$PLATFORM" ]]; then
-  echo "error: platform (ios|android) required" >&2
+  echo "error: platform (ios|android|ios-device|android-device) required" >&2
   usage >&2
   exit 2
 fi
@@ -137,9 +143,38 @@ extract_app_id() {
   printf '%s\n' "$fallback"
 }
 
+setup_android_env() {
+  export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"
+  export PATH="$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+}
+
+# Pick first USB-connected iPhone UDID via xcodebuild -showdestinations.
+# Real-device entries look like: { platform:iOS, id:<UDID>, name:... }
+# Simulator entries are "platform:iOS Simulator," and are excluded by the
+# trailing-comma match. Generic-device placeholders are excluded by UDID
+# regex (must be 8+ hex chars, optionally one dash and more hex).
+pick_ios_device_udid() {
+  xcodebuild -workspace ios/App/App.xcworkspace -scheme App \
+    -showdestinations 2>/dev/null \
+    | grep 'platform:iOS,' \
+    | sed -E 's/.*id:([^,}]+).*/\1/' \
+    | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+    | grep -E '^[0-9A-Fa-f]{8,}(-[0-9A-Fa-f]+)?$' \
+    | head -n1
+}
+
+# Pick first USB-connected, authorized Android device serial.
+# `adb devices` columns: <serial> <state>. We require state=="device"
+# (excludes "unauthorized" and "offline") and exclude emulators
+# (serial prefix "emulator-").
+pick_android_device_serial() {
+  adb devices 2>/dev/null \
+    | awk 'NR>1 && $2=="device" && $1 !~ /^emulator-/ { print $1; exit }'
+}
+
 APP_ID="$(extract_app_id)"
 
-# ---------- iOS path -------------------------------------------------------
+# ---------- iOS simulator path --------------------------------------------
 launch_ios() {
   require_tool xcrun     "Install Xcode + command line tools (xcode-select --install)."
   require_tool xcodebuild "Install Xcode and ensure 'xcode-select -p' points at it."
@@ -210,10 +245,46 @@ launch_ios() {
   echo "==> iOS launch complete (appId=$APP_ID)"
 }
 
-# ---------- Android path ---------------------------------------------------
+# ---------- iOS real-device path -------------------------------------------
+launch_ios_device() {
+  require_tool xcrun     "Install Xcode + command line tools (xcode-select --install)."
+  require_tool xcodebuild "Install Xcode and ensure 'xcode-select -p' points at it."
+  require_tool npm       "Install Node.js (https://nodejs.org)."
+  require_tool npx       "Comes with Node.js."
+
+  local udid="$DEVICE"
+  if [[ -z "$udid" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      udid="<first-connected-iphone-udid>"
+    else
+      udid="$(pick_ios_device_udid)"
+      if [[ -z "$udid" ]]; then
+        cat >&2 <<EOF
+error: no USB-connected iOS device detected.
+       Connect via USB, unlock the device, and tap "Trust This Computer".
+       Verify with: xcrun devicectl list devices
+EOF
+        exit 4
+      fi
+    fi
+  fi
+
+  echo "==> iOS device: udid='$udid', appId='$APP_ID'"
+
+  run npm run build
+  # `cap run` syncs Capacitor, builds via xcodebuild with the device
+  # destination, installs onto the device, and launches the app. Code
+  # signing (Apple ID / provisioning profile) must already be configured
+  # in the Xcode project — otherwise xcodebuild will fail with a clear
+  # signing error.
+  run npx cap run ios --target "$udid"
+
+  echo "==> iOS device launch complete (appId=$APP_ID, udid=$udid)"
+}
+
+# ---------- Android emulator path -----------------------------------------
 launch_android() {
-  export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}"
-  export PATH="$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+  setup_android_env
 
   require_tool adb        "Install Android SDK Platform-Tools (sdkmanager 'platform-tools')."
   require_tool emulator   "Install Android SDK Emulator (sdkmanager 'emulator')."
@@ -274,10 +345,50 @@ EOF
   echo "==> Android launch complete (package=$APP_ID)"
 }
 
+# ---------- Android real-device path --------------------------------------
+launch_android_device() {
+  setup_android_env
+
+  require_tool adb "Install Android SDK Platform-Tools (sdkmanager 'platform-tools')."
+  require_tool npm "Install Node.js (https://nodejs.org)."
+  require_tool npx "Comes with Node.js."
+
+  local serial="$DEVICE"
+  if [[ -z "$serial" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      serial="<first-connected-android-serial>"
+    else
+      serial="$(pick_android_device_serial)"
+      if [[ -z "$serial" ]]; then
+        cat >&2 <<EOF
+error: no USB-connected, authorized Android device detected.
+       1. Enable Developer Options + USB debugging on the device.
+       2. Connect via USB and accept the RSA fingerprint prompt.
+       3. Verify with: adb devices  (status must be "device", not "unauthorized")
+EOF
+        exit 4
+      fi
+    fi
+  fi
+
+  echo "==> Android device: serial='$serial', appId='$APP_ID'"
+
+  run npm run build
+  run npx cap sync android
+  run_sh "cd android && ./gradlew assembleDebug && cd .."
+
+  run adb -s "$serial" install -r android/app/build/outputs/apk/debug/app-debug.apk
+  run adb -s "$serial" shell monkey -p "$APP_ID" -c android.intent.category.LAUNCHER 1
+
+  echo "==> Android device launch complete (package=$APP_ID, serial=$serial)"
+}
+
 # ---------- dispatch -------------------------------------------------------
 case "$PLATFORM" in
-  ios)     launch_ios ;;
-  android) launch_android ;;
+  ios)            launch_ios ;;
+  android)        launch_android ;;
+  ios-device)     launch_ios_device ;;
+  android-device) launch_android_device ;;
   *)
     echo "error: unsupported platform '$PLATFORM'" >&2
     exit 2
