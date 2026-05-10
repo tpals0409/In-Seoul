@@ -3,7 +3,14 @@ import type { PersonaKey, ScenarioKey, Screen } from '@/types/contracts'
 
 /**
  * 개발용 인스펙터 — 페르소나 / 시나리오 / 화면을 즉시 전환.
- * 프로덕션 빌드(import.meta.env.DEV === false)에서는 App.tsx 가 마운트하지 않는다.
+ *
+ * 마운트 계약 (Sprint 8 task-2):
+ *   - 호출부 (`src/App.tsx`) 는 반드시 `{import.meta.env.DEV && <TweaksPanel />}` 형태로
+ *     마운트한다. vite 가 production 빌드에서 `import.meta.env.DEV` 를 `false` 로 정적
+ *     치환 → tree-shaking 으로 이 컴포넌트와 "DEV TWEAKS" 토큰이 번들에서 제거된다.
+ *   - `scripts/check-bundle.sh` 가 production bundle 에서 `DEV TWEAKS` 토큰 0건을
+ *     강제하는 회귀 가드. CI 에서 `npm run check:bundle` 실패 시 leak 발생.
+ *   - 신규 dev 패널을 추가할 때도 같은 가드를 따를 것.
  */
 export function TweaksPanel() {
   const persona = useAppStore((s) => s.persona)

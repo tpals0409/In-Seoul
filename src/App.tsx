@@ -197,7 +197,7 @@ export default function App() {
         >
           <AppShell />
         </div>
-        <TweaksPanel />
+        {import.meta.env.DEV && <TweaksPanel />}
       </AdvisorProvider>
     )
   }
@@ -208,7 +208,7 @@ export default function App() {
         <IOSDevice width={402} height={874} homeIndicator>
           <AppShell />
         </IOSDevice>
-        <TweaksPanel />
+        {import.meta.env.DEV && <TweaksPanel />}
       </div>
     </AdvisorProvider>
   )

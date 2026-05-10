@@ -24,7 +24,8 @@
     "mobile:dry:android": "scripts/mobile-launch.sh android --dry-run",
     "mobile:mem:ios": "scripts/mobile-mem-measure.sh ios",
     "mobile:mem:android": "scripts/mobile-mem-measure.sh android",
-    "uat:collate": "node scripts/collate-uat.mjs"
+    "uat:collate": "node scripts/collate-uat.mjs",
+    "check:bundle": "scripts/check-bundle.sh"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.3",
