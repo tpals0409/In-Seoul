@@ -436,9 +436,12 @@ npm run mobile:mem:android
    - Lightning/USB-C 케이블로 Mac 에 연결 → iPhone 에 "이 컴퓨터를 신뢰하시겠습니까?" 팝업 → **신뢰**
    - Xcode Devices and Simulators (`⇧⌘2`) 에서 단말이 보이는지 확인
    - 첫 install 후 앱 실행 시 "신뢰할 수 없는 개발자" 차단 → iPhone `설정 > 일반 > VPN 및 기기 관리 > 개발자 앱` 에서 본인 Apple ID 선택 후 **신뢰**
-3. **빌드 & 실행**
+3. **빌드 & 실행** — `mobile:ios` 스크립트는 시뮬레이터 전용이므로 실기기는 Capacitor CLI 직접 사용:
    ```bash
-   npm run mobile:ios:device      # 연결된 실기기에 install + launch (Sprint 6 task-1)
+   npm run build && npx cap sync ios
+   npx cap open ios               # Xcode 열림 → 상단 device picker 에서 연결된 iPhone 선택 → ▶ Run
+   # 또는 CLI 로 직접 실행 (UDID 는 `xcrun xctrace list devices` 로 확인):
+   npx cap run ios --target <UDID>
    ```
 
 #### Android
@@ -451,9 +454,12 @@ npm run mobile:mem:android
      ```bash
      adb devices       # <serial>    device  ← "device" 가 떠야 정상 (unauthorized / offline 이면 미허용)
      ```
-3. **빌드 & 실행**
+3. **빌드 & 실행** — `mobile:android` 스크립트는 에뮬레이터(AVD) 부팅을 전제하므로 실기기는 Capacitor CLI 직접 사용:
    ```bash
-   npm run mobile:android:device  # 연결된 실기기에 install + launch (Sprint 6 task-1)
+   npm run build && npx cap sync android
+   npx cap run android --target <serial>   # serial 은 위 `adb devices` 출력값
+   # 또는 Android Studio 로:
+   npx cap open android                    # Run 'app' 으로 연결된 단말 선택
    ```
 
 #### 흔한 막힘 → 해결책 카탈로그

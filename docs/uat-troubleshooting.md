@@ -9,7 +9,7 @@
 ## 1. iOS — "신뢰할 수 없는 개발자" 차단 (cert untrusted)
 
 **증상**
-- `npm run mobile:ios:device` 후 단말에 앱 아이콘은 깔리지만, 실행 시 "신뢰할 수 없는 개발자" 또는 "엔터프라이즈 앱을 신뢰할 수 없습니다" 다이얼로그가 뜨고 즉시 종료.
+- `npx cap run ios --target <UDID>` 또는 Xcode Run 으로 install 직후 단말에 앱 아이콘은 깔리지만, 실행 시 "신뢰할 수 없는 개발자" 또는 "엔터프라이즈 앱을 신뢰할 수 없습니다" 다이얼로그가 뜨고 즉시 종료.
 - Xcode console: `The operation couldn't be completed. Unable to launch <bundle id> because it has an invalid code signature, inadequate entitlements, or its profile has not been explicitly trusted by the user.`
 
 **원인**
@@ -19,7 +19,7 @@
 **해결책**
 1. iPhone `설정 > 일반 > VPN 및 기기 관리` (구버전: `프로필 및 기기 관리`) 진입.
 2. `개발자 앱` 섹션에서 본인 Apple ID 선택 → **신뢰** → 다시 한 번 확인 다이얼로그 → **신뢰**.
-3. 홈 화면으로 돌아와 앱 재실행. 7일 만료 후 같은 증상이면 Xcode 에서 다시 빌드/install (`npm run mobile:ios:device`).
+3. 홈 화면으로 돌아와 앱 재실행. 7일 만료 후 같은 증상이면 Xcode (또는 `npx cap run ios --target <UDID>`) 로 재빌드 + 재install — cert 가 갱신되면서 트러스트 단계도 다시 거쳐야 한다.
 
 ---
 
@@ -31,7 +31,7 @@
   List of devices attached
   R5CT12345ABC    unauthorized
   ```
-- `npm run mobile:android:device` 실행 시 `error: device unauthorized. This adb server's $ADB_VENDOR_KEYS is not set` 또는 `INSTALL_FAILED_USER_RESTRICTED`.
+- `npx cap run android --target <serial>` 실행 시 `error: device unauthorized. This adb server's $ADB_VENDOR_KEYS is not set` 또는 `INSTALL_FAILED_USER_RESTRICTED`.
 
 **원인**
 - 단말에서 USB 디버깅 권한 팝업을 아직 허용하지 않았다 (또는 케이블만 꽂고 화면을 안 봤다).
@@ -59,7 +59,7 @@
 **해결책**
 1. **네트워크 점검**: 단말을 VPN/사내망에서 분리 후 일반 셀룰러 또는 가정 Wi-Fi 로 재시도. `huggingface.co` / `storage.googleapis.com` 접근 가능해야 한다.
 2. **storage 확보**: 단말 `설정 > 저장공간` 에서 잔여 공간 ≥ 2 GB 확보 (사진/영상 정리, 다른 앱 캐시 삭제). Android 는 `adb shell df /data` 로 host 에서도 확인 가능.
-3. 둘 다 OK 인데 실패하면 앱을 완전히 삭제 후 재설치 (`npm run mobile:ios:device` / `mobile:android:device`) — 부분 다운로드 캐시가 corrupt 일 수 있음.
+3. 둘 다 OK 인데 실패하면 앱을 완전히 삭제 후 재설치 (iOS: Xcode Run 또는 `npx cap run ios --target <UDID>` / Android: `npx cap run android --target <serial>`) — 부분 다운로드 캐시가 corrupt 일 수 있음.
 
 ---
 
