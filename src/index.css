@@ -34,6 +34,9 @@ html, body, #root {
   color: var(--ink);
   background: #DDE6F2;
   font-feature-settings: "tnum" 1, "ss03" 1;
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 button { font-family: inherit; }
 
