@@ -1,0 +1,57 @@
+{
+  "sprint": 9,
+  "started_at": "2026-05-10T00:00:00+09:00",
+  "ended_at": "2026-05-10T17:30:00+09:00",
+  "start_commit": "6d6784f",
+  "end_commit": "28a4bac",
+  "max_pairs": 4,
+  "mode": "mixed",
+  "notes": [
+    "task-1 (실기기 UAT 본 수행) 은 사용자 손작업 — Sprint 8 P0 fix 후 측정값 의미 있어진 Sprint 4 Phase B 이월.",
+    "task-2 (shellcheck CI) 만 cmux 1쌍 디스패치. review 워커는 -a never -s workspace-write (Sprint 8 신규 메모 처방).",
+    "task-3 (cmux 워커 worktree 분리) 는 /start skill 자체를 수정하는 메타 작업이라 사용자 / 별도 세션으로 분리. 본 스프린트 dispatch 미포함."
+  ],
+  "tasks": [
+    {
+      "n": 1,
+      "title": "Sprint 4 Phase B 실기기 UAT 본 수행 (iOS / Android peak_rss_mb / 콜드 스타트 / mediapipe 모델 로드 / WebView 렌더)",
+      "scope_files": [".planning/sprint/9/uat-results/"],
+      "depends_on": [],
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "carried_over",
+      "carry_to_sprint": 10,
+      "notes": "Sprint 8 → 9 → 10 두 번째 이월. 사용자 손작업 미실행."
+    },
+    {
+      "n": 2,
+      "title": "shellcheck CI 추가 + scripts/*.sh lint 정리",
+      "scope_files": [
+        ".github/workflows/ci.yml",
+        "scripts/check-bundle.sh",
+        "scripts/mobile-launch.sh",
+        "scripts/mobile-mem-measure.sh",
+        "scripts/mobile-trace.sh"
+      ],
+      "depends_on": [],
+      "impl_ws": "workspace:23",
+      "review_ws": "workspace:24",
+      "status": "pass",
+      "rounds": 2,
+      "impl_commits": ["b0f16f1"],
+      "merge_commit_into_main": "28a4bac (--no-ff)",
+      "review_notes": "R1 reject 가 stale a1dcdcf (Sprint 8 task-2 commit) 검증해 무효, R2 nudge 후 정상 검증 (Checked commit b0f16f1)."
+    },
+    {
+      "n": 3,
+      "title": "cmux 워커 worktree 분리 — race 근본 차단 (/start skill 갱신)",
+      "scope_files": ["~/.claude/skills/start/..."],
+      "depends_on": [],
+      "impl_ws": null,
+      "review_ws": null,
+      "status": "carried_over_meta",
+      "carry_to_sprint": 10,
+      "notes": "/start skill 자체 수정. 자기 자신 수정 위험 → 사용자 / 별도 세션 권장. 본 스프린트 cmux 디스패치 미포함. Sprint 9 에서 working tree race 흔적 재발 → 우선순위 올림."
+    }
+  ]
+}
