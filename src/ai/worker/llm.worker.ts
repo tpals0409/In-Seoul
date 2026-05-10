@@ -4,19 +4,66 @@
 
 /// <reference lib="webworker" />
 
-import { MediaPipeLLM } from '../llm/mediapipe'
 import type {
   WorkerInMsg,
   WorkerOutMsg,
   WorkerOutErrorMsg,
 } from '../llm/types'
 
-// Worker globals — `self` inside a module worker is DedicatedWorkerGlobalScope.
-// We pin it via a typed reference so postMessage / addEventListener resolve
-// against the worker, not Window.
 declare const self: DedicatedWorkerGlobalScope
 
-const llm = new MediaPipeLLM()
+// Bootstrap trace — fires before any heavy import. If main never sees this,
+// worker module evaluation itself failed before listeners registered.
+self.postMessage({ type: 'trace', stage: 'worker:bootstrap-start' } as WorkerOutMsg)
+
+self.addEventListener('error', (ev: ErrorEvent) => {
+  self.postMessage({
+    type: 'trace',
+    stage: 'worker:self-error',
+    detail: { message: ev.message, filename: ev.filename, lineno: ev.lineno },
+  } as WorkerOutMsg)
+})
+self.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
+  self.postMessage({
+    type: 'trace',
+    stage: 'worker:unhandled-rejection',
+    detail: { reason: ev.reason instanceof Error ? ev.reason.message : String(ev.reason) },
+  } as WorkerOutMsg)
+})
+
+// Dynamic import so any throw in mediapipe top-level (e.g. wasm Module factory
+// init) lands in our catch and reports as a trace, not a silent worker death.
+let MediaPipeLLM: typeof import('../llm/mediapipe').MediaPipeLLM
+try {
+  self.postMessage({ type: 'trace', stage: 'worker:before-import-mediapipe' } as WorkerOutMsg)
+  const mod = await import('../llm/mediapipe')
+  MediaPipeLLM = mod.MediaPipeLLM
+  self.postMessage({ type: 'trace', stage: 'worker:after-import-mediapipe' } as WorkerOutMsg)
+} catch (err) {
+  self.postMessage({
+    type: 'trace',
+    stage: 'worker:import-mediapipe-throw',
+    detail: {
+      message: err instanceof Error ? err.message : String(err),
+      name: err instanceof Error ? err.name : undefined,
+    },
+  } as WorkerOutMsg)
+  throw err
+}
+
+let llm: InstanceType<typeof MediaPipeLLM>
+try {
+  llm = new MediaPipeLLM()
+  self.postMessage({ type: 'trace', stage: 'worker:llm-instantiated' } as WorkerOutMsg)
+} catch (err) {
+  self.postMessage({
+    type: 'trace',
+    stage: 'worker:llm-instantiate-throw',
+    detail: { message: err instanceof Error ? err.message : String(err) },
+  } as WorkerOutMsg)
+  throw err
+}
+
 let initialized = false
 
 function send(msg: WorkerOutMsg): void {

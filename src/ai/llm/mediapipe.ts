@@ -170,24 +170,44 @@ export async function fetchModelWithProgress(
 export class MediaPipeLLM {
   private llm: LlmInference | null = null
 
-  async init(modelUrl: string, onProgress: ProgressCallback): Promise<void> {
+  async init(
+    modelUrl: string,
+    onProgress: ProgressCallback,
+    onTrace?: (stage: string, detail?: Record<string, unknown>) => void,
+  ): Promise<void> {
+    const trace = onTrace ?? (() => undefined)
+    trace('init:enter', { modelUrl, wasmBase: MEDIAPIPE_WASM_BASE })
     // 호스트 화이트리스트는 WebGPU 검사 *전에* 평가 — 비-허용 호스트면 GPU 자원
     // 없는 환경에서도 동일하게 차단되어야 한다.
     assertAllowedModelHost(modelUrl)
+    trace('init:host-ok')
     await assertWebGpu()
+    trace('init:webgpu-ok')
 
     const fileset = await FilesetResolver.forGenAiTasks(MEDIAPIPE_WASM_BASE)
+    trace('init:fileset-ok')
     const modelBuffer = await fetchModelWithProgress(modelUrl, onProgress)
+    trace('init:fetch-ok', { byteLength: modelBuffer.byteLength })
 
-    this.llm = await LlmInference.createFromOptions(fileset, {
-      baseOptions: {
-        modelAssetBuffer: modelBuffer,
-      },
-      maxTokens: 2048,
-      topK: 40,
-      temperature: 0.7,
-      randomSeed: 1,
-    })
+    try {
+      this.llm = await LlmInference.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetBuffer: modelBuffer,
+        },
+        maxTokens: 2048,
+        topK: 40,
+        temperature: 0.7,
+        randomSeed: 1,
+      })
+      trace('init:gpu-ok')
+    } catch (err) {
+      const m = err instanceof Error ? err.message : String(err)
+      trace('init:gpu-fail', {
+        message: m,
+        name: err instanceof Error ? err.name : undefined,
+      })
+      throw err
+    }
   }
 
   /**
