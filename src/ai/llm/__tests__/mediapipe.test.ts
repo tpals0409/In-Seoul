@@ -24,7 +24,6 @@ describe('assertAllowedModelHost', () => {
   })
 
   it.each([
-    'https://cdn.jsdelivr.net/npm/foo/model.task',
     'https://huggingface.co/google/gemma/resolve/main/model.task',
     'https://hf.example.huggingface.co/model.task',
     'http://localhost:8080/model.task',
@@ -64,14 +63,10 @@ describe('assertAllowedModelHost', () => {
 
   it('whitelist 상수에 핵심 호스트가 모두 포함', () => {
     expect(MODEL_HOST_WHITELIST).toEqual(
-      expect.arrayContaining([
-        'jsdelivr.net',
-        'huggingface.co',
-        'localhost',
-        '127.0.0.1',
-      ]),
+      expect.arrayContaining(['huggingface.co', 'localhost', '127.0.0.1']),
     )
   })
+
 })
 
 describe('assertContentLength', () => {
@@ -134,7 +129,7 @@ describe('fetchModelWithProgress', () => {
     )
     await expect(
       fetchModelWithProgress(
-        'https://cdn.jsdelivr.net/npm/foo/m.task',
+        'https://huggingface.co/foo/resolve/main/m.task',
         () => undefined,
       ),
     ).rejects.toThrow(/invalid model size/)
@@ -150,7 +145,7 @@ describe('fetchModelWithProgress', () => {
     )
     await expect(
       fetchModelWithProgress(
-        'https://cdn.jsdelivr.net/npm/foo/m.task',
+        'https://huggingface.co/foo/resolve/main/m.task',
         () => undefined,
       ),
     ).rejects.toThrow(/exceeds limit/)
@@ -179,7 +174,7 @@ describe('fetchModelWithProgress', () => {
     fetchMock.mockResolvedValueOnce(new Response('', { status: 502 }))
     await expect(
       fetchModelWithProgress(
-        'https://cdn.jsdelivr.net/npm/foo/m.task',
+        'https://huggingface.co/foo/resolve/main/m.task',
         () => undefined,
       ),
     ).rejects.toThrow(/init-failed: model fetch failed \(502\)/)
