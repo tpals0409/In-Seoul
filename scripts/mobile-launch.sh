@@ -231,7 +231,7 @@ launch_ios() {
   run npm run build
   run npx cap sync ios
   run xcodebuild \
-    -workspace ios/App/App.xcworkspace \
+    -project ios/App/App.xcodeproj \
     -scheme App \
     -configuration Debug \
     -sdk iphonesimulator \
