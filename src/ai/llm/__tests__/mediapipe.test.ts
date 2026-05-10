@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  DOWNLOAD_IDLE_TIMEOUT_MS,
   MODEL_HOST_WHITELIST,
   MODEL_MAX_BYTES,
   assertAllowedModelHost,
@@ -178,5 +179,206 @@ describe('fetchModelWithProgress', () => {
         () => undefined,
       ),
     ).rejects.toThrow(/init-failed: model fetch failed \(502\)/)
+  })
+
+  // ===========================================================================
+  // Sprint 12 task-2: download lifecycle trace + idle timeout
+  // ===========================================================================
+
+  it('정상 stream → trace stage 가 request-start → response → first-chunk → milestone → complete 순서로 emit', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    // 10 chunks * 10 bytes = 100 bytes total. 각 chunk 마다 progress 가 0.10 씩
+    // 증가 → 0.10 / 0.25 / 0.50 / 0.75 / 0.90 boundary 모두 횡단.
+    const chunks: Uint8Array[] = []
+    for (let i = 0; i < 10; i++) {
+      chunks.push(new Uint8Array([i, i, i, i, i, i, i, i, i, i]))
+    }
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(c)
+        controller.close()
+      },
+    })
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, {
+        status: 200,
+        headers: { 'content-length': '100' },
+      }),
+    )
+    const traceCalls: { stage: string; detail?: Record<string, unknown> }[] = []
+    const url = 'https://huggingface.co/foo/resolve/main/m.task'
+    await fetchModelWithProgress(
+      url,
+      () => undefined,
+      (stage, detail) => {
+        traceCalls.push({ stage, ...(detail !== undefined ? { detail } : {}) })
+      },
+    )
+    const stages = traceCalls.map((c) => c.stage)
+    expect(stages[0]).toBe('download:request-start')
+    expect(stages[1]).toBe('download:response')
+    // first-chunk 는 첫 chunk 직후 emit 되며, 이후 milestone 들이 따라온다.
+    const firstChunkIdx = stages.indexOf('download:first-chunk')
+    const completeIdx = stages.indexOf('download:complete')
+    expect(firstChunkIdx).toBeGreaterThan(1)
+    expect(completeIdx).toBe(stages.length - 1)
+    // 5 boundary 각각 정확히 한 번씩 emit.
+    const milestoneCalls = traceCalls.filter(
+      (c) => c.stage === 'download:milestone',
+    )
+    expect(milestoneCalls).toHaveLength(5)
+    const milestoneValues = milestoneCalls
+      .map((c) => (c.detail as { progress: number }).progress)
+      .sort((a, b) => a - b)
+    expect(milestoneValues).toEqual([0.10, 0.25, 0.50, 0.75, 0.90])
+    // request-start detail 에 url 포함 / response detail 에 status / complete detail
+    // 에 totalBytes 포함되는지 sanity check.
+    expect(traceCalls[0]?.detail).toMatchObject({ modelUrl: url })
+    expect(traceCalls[1]?.detail).toMatchObject({ status: 200, ok: true })
+    expect(traceCalls.at(-1)?.detail).toMatchObject({ totalBytes: 100 })
+  })
+
+  it('첫 chunk 후 후속 chunk 가 idleTimeoutMs 동안 도달하지 않으면 init-failed throw + idle-timeout trace', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    // ReadableStream 의 enqueue→close 누락 케이스가 환경에 따라 자동 termination 으로
+    // 처리될 수 있어 mock reader 로 직접 두 번째 read() 를 무한 pending 시킨다.
+    let firstRead = true
+    const reader = {
+      read: vi.fn().mockImplementation(() => {
+        if (firstRead) {
+          firstRead = false
+          return Promise.resolve({
+            done: false,
+            value: new Uint8Array([1, 2, 3]),
+          })
+        }
+        return new Promise(() => undefined) // never resolves — idle watchdog 가 race 승리해야 함
+      }),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    }
+    const fakeBody = { getReader: () => reader }
+    const fakeResponse = {
+      ok: true,
+      status: 200,
+      url: 'https://huggingface.co/foo/resolve/main/m.task',
+      headers: new Headers({ 'content-length': '1000' }),
+      body: fakeBody,
+      arrayBuffer: () => Promise.reject(new Error('not used')),
+    }
+    fetchMock.mockResolvedValueOnce(fakeResponse as unknown as Response)
+    const traceCalls: { stage: string; detail?: Record<string, unknown> }[] = []
+    await expect(
+      fetchModelWithProgress(
+        'https://huggingface.co/foo/resolve/main/m.task',
+        () => undefined,
+        (stage, detail) => {
+          traceCalls.push({ stage, ...(detail !== undefined ? { detail } : {}) })
+        },
+        { idleTimeoutMs: 50 },
+      ),
+    ).rejects.toThrow(/init-failed: download stalled \(no chunk for 50ms\)/)
+    const idleTrace = traceCalls.find((c) => c.stage === 'download:idle-timeout')
+    expect(idleTrace).toBeDefined()
+    expect(idleTrace?.detail).toMatchObject({ idleMs: 50, lastByte: 3 })
+  })
+
+  it('idle-timeout 발화 시 reader.cancel() 가 호출됨', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const cancelSpy = vi.fn().mockResolvedValue(undefined)
+    let firstRead = true
+    const reader = {
+      read: vi.fn().mockImplementation(() => {
+        if (firstRead) {
+          firstRead = false
+          return Promise.resolve({
+            done: false,
+            value: new Uint8Array([42, 42, 42]),
+          })
+        }
+        return new Promise(() => undefined) // never resolves
+      }),
+      cancel: cancelSpy,
+      releaseLock: vi.fn(),
+    }
+    const fakeBody = { getReader: () => reader }
+    const fakeResponse = {
+      ok: true,
+      status: 200,
+      url: 'https://huggingface.co/foo/resolve/main/m.task',
+      headers: new Headers({ 'content-length': '1000' }),
+      body: fakeBody,
+      arrayBuffer: () => Promise.reject(new Error('not used')),
+    }
+    fetchMock.mockResolvedValueOnce(fakeResponse as unknown as Response)
+    await expect(
+      fetchModelWithProgress(
+        'https://huggingface.co/foo/resolve/main/m.task',
+        () => undefined,
+        () => undefined,
+        { idleTimeoutMs: 30 },
+      ),
+    ).rejects.toThrow(/init-failed: download stalled/)
+    expect(cancelSpy).toHaveBeenCalled()
+  })
+
+  it('progress 가 같은 milestone boundary 를 여러 chunk 에 걸쳐 통과해도 trace 는 단 한 번만 emit (dedup)', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    // 100 chunks * 1 byte. progress 가 boundary 를 매끄럽게 통과하지만 내부 set 으로
+    // 각 boundary 에 대해 1회만 emit 되어야 한다.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 100; i++) {
+          controller.enqueue(new Uint8Array([i & 0xff]))
+        }
+        controller.close()
+      },
+    })
+    fetchMock.mockResolvedValueOnce(
+      new Response(stream, {
+        status: 200,
+        headers: { 'content-length': '100' },
+      }),
+    )
+    const milestoneCount = new Map<number, number>()
+    await fetchModelWithProgress(
+      'https://huggingface.co/foo/resolve/main/m.task',
+      () => undefined,
+      (stage, detail) => {
+        if (stage === 'download:milestone' && detail) {
+          const p = (detail as { progress: number }).progress
+          milestoneCount.set(p, (milestoneCount.get(p) ?? 0) + 1)
+        }
+      },
+    )
+    // 정확히 5 boundary, 각 1회.
+    expect([...milestoneCount.entries()].sort((a, b) => a[0] - b[0])).toEqual([
+      [0.10, 1],
+      [0.25, 1],
+      [0.50, 1],
+      [0.75, 1],
+      [0.90, 1],
+    ])
+  })
+
+  it('onTrace 미지정 (undefined) 이어도 기존 호출자 (worker / main-thread fallback 외) 는 정상 동작', async () => {
+    // 회귀 가드: trace 콜백이 옵셔널이라는 계약 검증.
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    const payload = new Uint8Array([1, 2, 3, 4])
+    fetchMock.mockResolvedValueOnce(
+      new Response(payload, {
+        status: 200,
+        headers: { 'content-length': '4' },
+      }),
+    )
+    const out = await fetchModelWithProgress(
+      'https://huggingface.co/m.task',
+      () => undefined,
+    )
+    expect(Array.from(out)).toEqual([1, 2, 3, 4])
+  })
+
+  it('DOWNLOAD_IDLE_TIMEOUT_MS 상수 export = 30s', () => {
+    expect(DOWNLOAD_IDLE_TIMEOUT_MS).toBe(30_000)
   })
 })

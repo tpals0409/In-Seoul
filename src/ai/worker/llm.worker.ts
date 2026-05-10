@@ -116,9 +116,23 @@ async function handleInit(modelUrl: string): Promise<void> {
     return
   }
   try {
-    await llm.init(modelUrl, (progress) => {
-      send({ type: 'progress', progress })
-    })
+    await llm.init(
+      modelUrl,
+      (progress) => {
+        send({ type: 'progress', progress })
+      },
+      // Sprint 12 task-2: download lifecycle trace 도 main thread 로 forward —
+      // 'download:request-start' / 'download:response' / 'download:first-chunk'
+      // / 'download:milestone' / 'download:complete' / 'download:idle-timeout'
+      // 가 useLLM 의 'trace' 메시지 핸들러로 흘러간다 (배지 0% stall 진단용).
+      (stage, detail) => {
+        if (detail !== undefined) {
+          send({ type: 'trace', stage, detail })
+        } else {
+          send({ type: 'trace', stage })
+        }
+      },
+    )
     // Once download finishes, we're loading the model into the GPU runtime.
     send({ type: 'loading' })
     initialized = true
