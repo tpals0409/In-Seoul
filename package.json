@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "bash scripts/copy-mediapipe-wasm.sh",
-    "build": "tsc -b && vite build",
+    "build": "bash scripts/copy-mediapipe-wasm.sh && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

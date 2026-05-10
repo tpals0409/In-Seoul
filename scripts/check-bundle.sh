@@ -46,3 +46,37 @@ fi
 
 COUNT=$(echo "${JS_FILES}" | tr ' ' '\n' | grep -c '\.js$' || true)
 echo "[check:bundle] OK — ${COUNT}개 .js 파일에서 \"${TOKEN}\" 토큰 0건."
+
+# Sprint 12 task-1: dist/wasm/ MediaPipe wasm 자체 호스팅 검증.
+#
+# `prebuild` 가 우회되거나 `public/wasm/` 가 비어 있으면 dist 번들에 wasm 0개로 떨어져
+# 런타임이 jsdelivr CDN fallback 시도 → "ModuleFactory not set" 회귀 가능.
+# 6 파일 모두 존재하지 않으면 즉시 실패하고 진단 메시지 출력.
+WASM_DIR="${DIST_DIR}/wasm"
+WASM_FILES=(
+  "genai_wasm_internal.js"
+  "genai_wasm_internal.wasm"
+  "genai_wasm_module_internal.js"
+  "genai_wasm_module_internal.wasm"
+  "genai_wasm_nosimd_internal.js"
+  "genai_wasm_nosimd_internal.wasm"
+)
+
+MISSING_WASM=()
+for f in "${WASM_FILES[@]}"; do
+  if [ ! -f "${WASM_DIR}/${f}" ]; then
+    MISSING_WASM+=("${f}")
+  fi
+done
+
+if [ "${#MISSING_WASM[@]}" -gt 0 ]; then
+  echo "[check:bundle] FAIL — \`/wasm\` 자체 호스팅 누락 (${#MISSING_WASM[@]}/${#WASM_FILES[@]}):" >&2
+  for f in "${MISSING_WASM[@]}"; do
+    echo "  - ${WASM_DIR}/${f}" >&2
+  done
+  echo "" >&2
+  echo "해결: \`npm run build\` 또는 \`bash scripts/copy-mediapipe-wasm.sh\` 재실행." >&2
+  exit 1
+fi
+
+echo "[check:bundle] OK — dist/wasm/ 6 파일 모두 존재 (MediaPipe 자체 호스팅 무결)."
