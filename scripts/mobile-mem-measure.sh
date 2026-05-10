@@ -93,11 +93,14 @@ Notes:
   from physical-device numbers — compare against real-device runs
   before relying on absolute figures.
 
-  Real iOS device: `xcrun devicectl` exposes process IDs but no per-process
-  RSS via CLI, so per-sample memory fields are emitted as null. Use
-  Instruments.app / `instruments -t Allocations -w <udid> -D <out>` for
-  authoritative numbers; this script verifies the process is reachable
-  and records peak from any accompanying simulator runs side-by-side.
+  Real iOS device: per-sample memory is captured by a 2s `xctrace record
+  --template Allocations` window attached to the live PID; peak resident /
+  allocated bytes are extracted via `xctrace export`. Falls back to
+  `xcrun devicectl device info processes` JSON probe (memoryFootprint /
+  residentMemoryBytes / physicalFootprintBytes) when xctrace is missing
+  or its export schema does not surface byte counts. Both paths failing
+  emits null + a one-time stderr warn — manual fallback is
+  `instruments -t Allocations -w <udid> -D <out>.trace` in Instruments.app.
 
 Examples:
   scripts/mobile-mem-measure.sh ios
@@ -358,12 +361,91 @@ for p in procs:
 }
 
 ios_device_sample() {
-  # devicectl does not expose per-process RSS via CLI — emit null fields
-  # and surface the limitation once on stderr.
+  # echoes "<rss_mb> <dirty_mb>" — values are bare numbers or "null".
+  # Strategy:
+  #   1) Primary  — xctrace record --template Allocations (short window) +
+  #                 xctrace export → parse peak resident/allocated bytes.
+  #   2) Fallback — xcrun devicectl device info processes JSON; probe any
+  #                 memory-shaped field (newer Xcode releases expose these).
+  #   3) Both fail → null + one-time stderr warn.
+  local pid="$1"
+
+  # ---- (1) xctrace + Allocations trace ----
+  if command -v xctrace >/dev/null 2>&1; then
+    local tmpdir trace raw rss_mb=""
+    if tmpdir=$(mktemp -d 2>/dev/null); then
+      trace="$tmpdir/sample.trace"
+      if xctrace record --template "Allocations" \
+            --device "$DEVICE" --time-limit 2s \
+            --attach "$pid" --output "$trace" >/dev/null 2>&1; then
+        raw=$(xctrace export --input "$trace" --xpath '/trace-toc' 2>/dev/null || true)
+        if [[ -n "$raw" ]]; then
+          # Robust scan: pick the largest byte-count from any
+          # memory-shaped attribute (memory-resident, allocated-bytes,
+          # bytes, footprint-bytes). Convert max → MB.
+          rss_mb=$(printf '%s' "$raw" | awk '
+            BEGIN { best=0 }
+            {
+              s=$0
+              while (match(s, /(memory-resident|allocated-bytes|footprint-bytes|bytes)="[0-9]+"/)) {
+                tok=substr(s, RSTART, RLENGTH)
+                sub(/^[a-z-]+="/, "", tok)
+                sub(/"$/, "", tok)
+                n = tok + 0
+                if (n > best) best = n
+                s = substr(s, RSTART + RLENGTH)
+              }
+            }
+            END {
+              if (best > 0) printf "%.2f", best / (1024*1024)
+            }' || true)
+        fi
+      fi
+      rm -rf "$tmpdir"
+    fi
+    if [[ -n "$rss_mb" ]]; then
+      printf '%s null\n' "$rss_mb"
+      return 0
+    fi
+  fi
+
+  # ---- (2) devicectl JSON — probe memory fields ----
+  local raw mb=""
+  raw=$(xcrun devicectl device info processes \
+          --device "$DEVICE" --quiet --json-output - 2>/dev/null || true)
+  if [[ -n "$raw" ]]; then
+    mb=$(printf '%s' "$raw" | PID="$pid" python3 -c '
+import json, os, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+target = int(os.environ.get("PID", "0") or 0)
+if not target:
+    sys.exit(0)
+for p in (data.get("result") or {}).get("runningProcesses") or []:
+    if p.get("processIdentifier") != target:
+        continue
+    for k in ("memoryFootprint", "residentMemoryBytes",
+              "memoryResidentBytes", "memory", "rssBytes",
+              "physicalFootprintBytes"):
+        v = p.get(k)
+        if isinstance(v, (int, float)) and v > 0:
+            print(f"{v/(1024*1024):.2f}")
+            sys.exit(0)
+    break
+' 2>/dev/null || true)
+  fi
+  if [[ -n "$mb" ]]; then
+    printf '%s null\n' "$mb"
+    return 0
+  fi
+
+  # ---- (3) both failed ----
   if [[ "$IOS_DEVICE_SAMPLE_NOTED" -eq 0 ]]; then
-    echo "warn: real iOS device per-process RSS not exposed by xcrun devicectl;" >&2
-    echo "      memory fields emitted as null. Use Instruments.app or" >&2
-    echo "      'instruments -t Allocations -w $DEVICE -D <out>.trace' for numbers." >&2
+    echo "warn: real iOS device memory sampling failed (xctrace + devicectl probe);" >&2
+    echo "      ensure xctrace is installed (Xcode 12+) and the device is paired." >&2
+    echo "      Manual fallback: 'instruments -t Allocations -w $DEVICE -D out.trace'." >&2
     IOS_DEVICE_SAMPLE_NOTED=1
   fi
   printf 'null null\n'
@@ -421,7 +503,7 @@ android_sample() {
 
 android_mediapipe_loaded() {
   local logs=""
-  logs=$(adb logcat -d -t 2000 2>/dev/null \
+  logs=$(adb "${ADB_S[@]}" logcat -d -t 2000 2>/dev/null \
          | grep -E -i "MediaPipe|tasks-genai" | head -n1 || true)
   [[ -n "$logs" ]] && echo true || echo false
 }
@@ -495,7 +577,11 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
       else
         printf '[dry-run] pid_lookup:  xcrun devicectl device info processes --device %q --quiet --json-output -\n' \
           "$DEVICE"
-        printf '[dry-run] sampler:     <devicectl exposes no per-process RSS — emit null fields>\n'
+        printf '[dry-run] sampler[1]:  xctrace record --template Allocations --device %q --time-limit 2s --attach <PID> --output <tmp>.trace\n' \
+          "$DEVICE"
+        printf '[dry-run] sampler[1]:  xctrace export --input <tmp>.trace --xpath /trace-toc  (scan memory-resident|allocated-bytes|footprint-bytes|bytes)\n'
+        printf '[dry-run] sampler[2]:  xcrun devicectl device info processes --device %q --quiet --json-output -  (probe memoryFootprint|residentMemoryBytes|...)\n' \
+          "$DEVICE"
         printf '[dry-run] mediapipe:   <real-device console capture requires Instruments.app / idevicesyslog — emit false>\n'
       fi
       ;;
