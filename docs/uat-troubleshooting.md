@@ -110,6 +110,131 @@
 
 ---
 
+## 6. iOS 모델 다운로드 "0%" stall 진단 (Sprint 12)
+
+> Sprint 12 트리거. iOS 26.4 시뮬레이터에서 AiSheet 진입 시 배지가 "모델 다운로드 0%" (주황) 에서 멈추고, `simctl log` 의 `[INSEOUL_LLM]` 항목이 0건이거나 `download:` 단계에서 멈추는 silent-death 패턴. 동일 증상의 진단 트리.
+
+**증상**
+- AiSheet 배지가 "모델 다운로드 0%" 에서 stall, progress bar 미증가.
+- `xcrun simctl spawn booted log show ... INSEOUL_LLM` 출력이 0건이거나 `download:request-start` / `download:response` 등 특정 단계에서 멈춘 채 다음 stage 가 도달하지 않음.
+- Capacitor reload 무한 루프 (`WebProcessProxy::didClose`) 가 같이 보이면 메모리 한도 초과 가능성 (섹션 4 참조).
+
+### 6-A. 진단 명령
+
+#### 1) simctl log filter — main thread console.warn forward 추적
+
+```bash
+xcrun simctl spawn booted log show --last 10m \
+  --predicate 'composedMessage CONTAINS "INSEOUL_LLM"' \
+  --style compact
+```
+
+기대 출력 (정상 경로): `worker:constructing` … `init:fileset-ok` … `download:request-start` … `download:response` … `download:first-chunk` … `download:milestone(0.10)` … `download:complete` … `init:fetch-ok` … `init:gpu-ok` → `ready`.
+
+**어느 단계에서 멈췄는지가 root cause 의 1차 단서.** stage 매핑은 6-B 참조.
+
+#### 2) stale 번들 식별 — Sprint 11 task-1 (wasm self-host) 가 ios 번들에 들어갔는지
+
+```bash
+grep -oE "MEDIAPIPE_WASM_BASE|/wasm|jsdelivr" \
+  ios/App/App/public/assets/mediapipe-*.js | sort -u
+```
+
+기대: `/wasm` 만 출력. `jsdelivr` 가 출력되면 *stale 빌드* — `npm run build` 이후 `npx cap sync ios` 가 빠진 상태. 6-C 의 빌드 체인 명령으로 재동기화.
+
+#### 3) prebuild 실행 검증 — wasm 6 파일이 `public/wasm/` 에 복사됐는지
+
+```bash
+ls public/wasm/ | grep '^genai_' | wc -l
+```
+
+기대: `6`. 0 이면 `prebuild` 가 한 번도 안 돌아간 상태 — 다음 명령으로 복구:
+
+```bash
+npm run prebuild        # 또는
+bash scripts/copy-mediapipe-wasm.sh
+```
+
+`public/wasm/` 는 `.gitignore` 로 제외되므로 fresh clone / CI 환경마다 재실행 필요.
+
+#### 4) 번들 검증 스크립트 — task-1 의 `check-bundle.sh` 강화 활용
+
+```bash
+bash scripts/check-bundle.sh
+```
+
+`dist/wasm/` 에 6 wasm 파일 (`genai_wasm_internal.{js,wasm}`, `genai_wasm_module_internal.{js,wasm}`, `genai_wasm_nosimd_internal.{js,wasm}`) 이 모두 존재하는지 fail-fast 로 검증. 누락 시 exit 1 + 진단 메시지 (`해결: npm run build 또는 bash scripts/copy-mediapipe-wasm.sh 재실행`) 출력.
+
+#### 5) idle timeout 확인 — task-2 의 watchdog 동작
+
+`fetchModelWithProgress` 가 첫 chunk 도달 후 30 초 동안 다음 chunk 미수신 시 자동으로 `[INSEOUL_LLM] download:idle-timeout` trace + worker error `init-failed: download stalled (no chunk for 30000ms)` 로 종료시킨다.
+
+배지가 "모델 다운로드 0%" 에서 정확히 30 초 후 "오류 — 템플릿 답변 사용 중" 으로 전환되면 watchdog 정상 동작 = root cause 가 *서버/네트워크 stream stall*. simctl log 의 `download:idle-timeout` detail 의 `lastByte` 로 어디까지 받았는지 확인.
+
+### 6-B. stage 별 root cause 매핑 표
+
+`@mediapipe/tasks-genai` init 흐름의 각 trace stage 에서 다음 stage 로 넘어가지 못하면 그 사이에서 죽은 것. 표의 stage 명은 task-2 의 실제 emit 명 (`mediapipe.ts` `fetchModelWithProgress` + `MediaPipeLLM.init`).
+
+| 마지막 trace stage | 다음에 와야 했던 stage | 의심 root cause | 확인 방법 |
+|---|---|---|---|
+| `init:fileset-ok` | `download:request-start` | fetch 도달 전 throw — `assertAllowedModelHost` 거부 등 | error.message 에 `init-failed` prefix |
+| `download:request-start` | `download:response` | TCP/TLS handshake stall, DNS, ATS 차단 | `curl -v <modelUrl>` 로 호스트 도달성 확인 |
+| `download:response` | `download:first-chunk` | 헤더 후 body stream 미도달 (서버 buffer hold) | `download:response` detail 의 `contentLength` + `status` |
+| `download:first-chunk` | `download:milestone(0.10)` | 첫 chunk 후 stall — WKWebView Worker fetch streaming 결함 의심 | 30 초 후 `download:idle-timeout` 발생 여부 |
+| `download:milestone(0.50)` | `download:milestone(0.75)` | 진행 중 stall — 네트워크 끊김 | 시뮬레이터 호스트 Mac 네트워크 / `download:idle-timeout` 의 `lastByte` |
+| `download:complete` | `init:fetch-ok` | concat / `Uint8Array` 할당 throw — drop | error.message 에 `init-failed` |
+| `init:fetch-ok` | `init:gpu-ok` | `LlmInference.createFromOptions` throw — wasm 파일 누락 또는 메모리 부족 | `dist/wasm/` 6 파일 + 실기기 메모리 한도 (~1.5GB, 섹션 4) |
+
+> milestone boundaries 는 `[0.10, 0.25, 0.50, 0.75, 0.90]` (`mediapipe.ts:MILESTONE_BOUNDARIES`). 각 boundary 통과 시 한 번씩 emit.
+
+### 6-C. 빌드 체인 검증 명령 (task-1 출력 활용)
+
+stale 번들 / wasm 누락이 0% stall 의 가장 흔한 원인이므로, UAT 사이클 시작 전에 다음 5단계를 한 번 흘려 회귀를 차단한다. **항상 `npm run build` 사용 — `vite build` 직접 호출 금지** (task-1 의 prebuild fail-fast 우회).
+
+```bash
+# 1. 항상 npm run build 사용 (vite build 직접 호출 금지)
+npm run build
+
+# 2. 빌드 직후 dist/wasm 검증
+ls dist/wasm/ | grep '^genai_' | wc -l   # 기대: 6
+
+# 3. iOS 번들 동기화
+npx cap sync ios
+
+# 4. 동기화 후 ios 번들 검증
+grep -oE "/wasm|jsdelivr" ios/App/App/public/assets/mediapipe-*.js | sort -u
+# 기대: /wasm 만. jsdelivr 가 보이면 stale.
+
+# 5. 모든 검증 한 번에
+bash scripts/check-bundle.sh
+```
+
+`check-bundle.sh` 는 `dist/wasm/` 6 파일 누락을 fail-fast 하므로 4-5번이 실패하면 1-2번부터 재실행.
+
+---
+
+## 7. 시뮬레이터 vs 실기기 매트릭스
+
+LLM 다운로드/추론 흐름의 환경별 차이. UAT 결과 해석 시 어느 환경의 데이터인지 명시 + 실기기 검증 누락 항목 식별용.
+
+| 항목 | iOS 시뮬레이터 (iOS 26+) | 실기기 (iPhone) |
+|---|---|---|
+| WebGPU 가용성 | 있음 (Apple Silicon Mac 기준) — `navigator.gpu.requestAdapter()` resolves | 있음 (iOS 17+) |
+| 메모리 한도 | Mac 호스트 시스템 RAM (실질 무제한) | WKWebView 1.4-1.5GB jetsam (iOS 16+) |
+| 네트워크 | Mac NAT — 호스트와 동등 | cellular / wifi (CDN 지연 / TLS resumption 차이) |
+| 콘솔 접근 | `xcrun simctl spawn booted log` | Xcode > Window > Devices and Simulators > Console |
+| Worker 콘솔 | postMessage trace 만 (Capacitor bridge 동일) | postMessage trace 만 |
+| WebGPU adapter | discrete or integrated GPU | A-series GPU |
+| ATS (Info.plist) | 동일 | 동일 |
+| 모델 다운로드 528MB | 빠름 (Mac 회선) | wifi/cellular 의존 |
+
+**해석 메모**
+- 시뮬레이터에서는 WKWebView 메모리 한도가 사실상 풀려 있어 *메모리 초과로 죽는 케이스 (섹션 4 / Sprint 10 Gemma-4 1.86GB) 를 재현할 수 없다.* 실기기 UAT 가 필수이며, 시뮬레이터 통과를 "갑판 오른" 신호로 오해하면 안 된다.
+- 시뮬레이터에서 네트워크 stall (`download:first-chunk` 후 idle-timeout 등) 이 재현되면 실기기는 더 심하게 나타난다 (TLS handshake 비용, cellular packet loss). 시뮬레이터에서 한 번이라도 보이면 실기기 회귀 가능성을 높게 잡는다.
+- Sprint 12 트리거였던 "모델 다운로드 0% stall" 은 시뮬레이터에서 *stale 번들* 이 진짜 원인이었으며, 실기기 경험은 미검증 — 다음 UAT 사이클에서 재현 여부를 확인해야 한다 (시뮬레이터 5-10 분 smoke 가 실기기 1-2 시간 헛수고를 막는 패턴은 Sprint 7 finding 5건에서 확인됨).
+
+---
+
 ## 참고
 - 시뮬레이터/에뮬레이터 단계 issue: README — 자동화 스크립트 (Sprint 4) 섹션.
 - 측정 결과 첨부 위치: `.planning/sprint/{N}/measurements/{platform}-{label}.json`.
